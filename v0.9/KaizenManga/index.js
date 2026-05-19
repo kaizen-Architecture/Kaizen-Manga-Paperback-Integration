@@ -1,0 +1,1 @@
+var source=(function(e){return Object.defineProperty(e,Symbol.toStringTag,{value:`Module`}),e.KaizenManga=class{async getMangaDetails(e){throw Error(`Kaizen Manga v0.9 connector not yet implemented. Please use the v0.8 repository.`)}async getChapters(e){return[]}async getChapterDetails(e,t){return{pages:[]}}async getSearchResults(e,t){return{results:[]}}},e})({});

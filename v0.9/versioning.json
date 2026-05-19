@@ -1,0 +1,24 @@
+{
+  "buildTime": "2026-05-19T06:53:30.992Z",
+  "builtWith": {
+    "toolchain": "1.0.0-alpha.87",
+    "types": "1.0.0-alpha.87"
+  },
+  "repository": {
+    "name": "paperback-extension-kaizen-v0.9",
+    "description": "Accede a tu biblioteca local de Kaizen Manga Downloader directamente desde Paperback iOS v0.9."
+  },
+  "sources": [
+    {
+      "name": "Kaizen Manga (v0.9 WIP)",
+      "description": "Conector WIP para Paperback v0.9. Usa el paquete v0.8 para tu instalación actual.",
+      "version": "1.0.0",
+      "icon": "icon.png",
+      "author": "Kaizen Architecture",
+      "authorWebsite": "https://github.com/kaizen-Architecture",
+      "contentRating": "SAFE",
+      "websiteBaseURL": "http://localhost:3333",
+      "id": "KaizenManga"
+    }
+  ]
+}
