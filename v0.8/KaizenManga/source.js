@@ -729,7 +729,7 @@ var _Sources = (() => {
   });
   var import_types = __toESM(require_lib());
   var KaizenMangaInfo = {
-    version: "1.0.4",
+    version: "1.0.5",
     name: "Kaizen Manga",
     icon: "icon.png",
     author: "D4nj3s (DanielJNavas)",
@@ -743,7 +743,7 @@ var _Sources = (() => {
         type: import_types.BadgeColor.BLUE
       }
     ],
-    intents: import_types.SourceIntents.MANGA_CHAPTERS | import_types.SourceIntents.HOMEPAGE_SECTIONS | import_types.SourceIntents.SETTINGS_UI
+    intents: import_types.SourceIntents.MANGA_CHAPTERS | import_types.SourceIntents.HOMEPAGE_SECTIONS | import_types.SourceIntents.SETTINGS_UI | import_types.SourceIntents.MANGA_TRACKING
   };
   function cleanHost(raw) {
     let h = (raw ?? "").trim().replace(/\/+$/, "");
@@ -1037,6 +1037,99 @@ var _Sources = (() => {
           })
         ]
       });
+    }
+    // ─── Tracking ──────────────────────────────────────────────────────────────
+    async getMangaProgress(mangaId) {
+      try {
+        const { host } = await this.creds();
+        const raw = await this.apiFetch(`${host}/api/v1/mangas/${mangaId}`);
+        if (!raw || !raw.chapters) return void 0;
+        const readChapters = (raw.chapters ?? []).filter((ch) => ch.isRead);
+        let lastReadChapterNumber = 0;
+        if (readChapters.length > 0) {
+          lastReadChapterNumber = Math.max(...readChapters.map((ch) => ch.index ?? 0));
+        }
+        return App.createMangaProgress({
+          mangaId,
+          lastReadChapterNumber,
+          lastReadVolumeNumber: 0,
+          trackedListName: "Kaizen",
+          lastReadTime: /* @__PURE__ */ new Date()
+        });
+      } catch (err) {
+        return void 0;
+      }
+    }
+    async getMangaProgressManagementForm(mangaId) {
+      return App.createDUIForm({
+        sections: async () => {
+          try {
+            const { host } = await this.creds();
+            const raw = await this.apiFetch(`${host}/api/v1/mangas/${mangaId}`);
+            const reading = raw.readingStatus ?? { readChapters: 0, totalChapters: 0 };
+            return [
+              App.createDUISection({
+                id: "info",
+                header: "Progreso de Lectura en Kaizen",
+                isHidden: false,
+                rows: async () => [
+                  App.createDUILabel({
+                    id: "progress",
+                    label: "Cap\xEDtulos Le\xEDdos",
+                    value: `${reading.readChapters} / ${reading.totalChapters}`
+                  })
+                ]
+              })
+            ];
+          } catch (err) {
+            return [
+              App.createDUISection({
+                id: "error_section",
+                header: "Error",
+                isHidden: false,
+                rows: async () => [
+                  App.createDUILabel({
+                    id: "error_msg",
+                    label: "No se pudo conectar con el servidor",
+                    value: err.message || String(err)
+                  })
+                ]
+              })
+            ];
+          }
+        },
+        onSubmit: async () => {
+        }
+      });
+    }
+    async processChapterReadActionQueue(actionQueue) {
+      try {
+        const chapterReadActions = await actionQueue.queuedChapterReadActions();
+        const { host } = await this.creds();
+        for (const readAction of chapterReadActions) {
+          try {
+            const mangaId = parseInt(readAction.sourceMangaId);
+            const chapterId = parseInt(readAction.sourceChapterId);
+            if (isNaN(mangaId) || isNaN(chapterId)) {
+              await actionQueue.discardChapterReadAction(readAction);
+              continue;
+            }
+            const body = JSON.stringify({
+              chapters: [
+                {
+                  id: chapterId,
+                  isRead: true
+                }
+              ]
+            });
+            await this.apiFetch(`${host}/api/v1/mangas/${mangaId}`, "PATCH", body);
+            await actionQueue.discardChapterReadAction(readAction);
+          } catch (err) {
+            await actionQueue.retryChapterReadAction(readAction);
+          }
+        }
+      } catch (err) {
+      }
     }
   };
   return __toCommonJS(KaizenManga_exports);
