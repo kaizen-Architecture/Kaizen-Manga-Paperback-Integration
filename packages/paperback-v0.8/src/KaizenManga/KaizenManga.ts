@@ -27,7 +27,7 @@ declare const App: any
 // This object is evaluated in Node by the toolchain to generate versioning.json.
 // It must be plain data — no runtime globals.
 export const KaizenMangaInfo: SourceInfo = {
-  version: '1.0.2',
+  version: '1.0.3',
   name: 'Kaizen Manga',
   icon: 'icon.png',
   author: 'D4nj3s (DanielJNavas)',
@@ -58,8 +58,8 @@ function cleanHost(raw: string): string {
 
 // ─── Source Class ─────────────────────────────────────────────────────────────
 export class KaizenManga extends Source {
-  readonly requestManager: RequestManager
-  private _stateManager?: SourceStateManager
+  requestManager: RequestManager
+  stateManager: SourceStateManager
 
   constructor(cheerio: CheerioAPI) {
     super(cheerio)
@@ -67,13 +67,7 @@ export class KaizenManga extends Source {
       requestsPerSecond: 5,
       requestTimeout: 20000,
     })
-  }
-
-  private get stateManager(): SourceStateManager {
-    if (!this._stateManager) {
-      this._stateManager = App.createSourceStateManager()
-    }
-    return this._stateManager
+    this.stateManager = App.createSourceStateManager()
   }
 
   private async creds(): Promise<{ host: string; token: string }> {
