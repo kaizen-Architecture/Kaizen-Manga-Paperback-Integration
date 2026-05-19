@@ -15,6 +15,10 @@ import {
   TagSection,
   RequestManager,
   SourceStateManager,
+  DUIForm,
+  DUISection,
+  DUINavigationButton,
+  DUIButton,
 } from '@paperback/types'
 import { CheerioAPI } from 'cheerio'
 
@@ -27,7 +31,7 @@ declare const App: any
 // This object is evaluated in Node by the toolchain to generate versioning.json.
 // It must be plain data — no runtime globals.
 export const KaizenMangaInfo: SourceInfo = {
-  version: '1.0.3',
+  version: '1.0.4',
   name: 'Kaizen Manga',
   icon: 'icon.png',
   author: 'D4nj3s (DanielJNavas)',
@@ -293,32 +297,92 @@ export class KaizenManga extends Source {
   }
 
   // ─── Settings UI ──────────────────────────────────────────────────────────
-  async getSourceMenu() {
+  async getSourceMenu(): Promise<DUISection> {
     return App.createDUISection({
       id: 'settings',
       header: 'Configuración de Kaizen Downloader',
-      footer:
-        'Introduce la URL de tu instancia de Kaizen y tu API Token para conectarte.',
       isHidden: false,
       rows: async () => [
-        App.createDUIInputField({
-          id: 'host',
-          label: 'Host del Servidor',
-          value: App.createDUIBinding({
-            get: async () =>
-              ((await this.stateManager.retrieve('host')) as string) ?? '',
-            set: async (v: string) => this.stateManager.store('host', v),
-          }),
-        }),
-        App.createDUISecureInputField({
-          id: 'token',
-          label: 'API Token',
-          value: App.createDUIBinding({
-            get: async () =>
-              ((await this.stateManager.retrieve('token')) as string) ?? '',
-            set: async (v: string) => this.stateManager.store('token', v),
-          }),
-        }),
+        App.createDUINavigationButton({
+          id: 'server_settings',
+          label: 'Configuración del Servidor',
+          form: App.createDUIForm({
+            sections: async () => [
+              App.createDUISection({
+                id: 'connection',
+                header: 'Detalles del Servidor Kaizen',
+                isHidden: false,
+                rows: async () => [
+                  App.createDUIInputField({
+                    id: 'host',
+                    label: 'Host del Servidor',
+                    value: App.createDUIBinding({
+                      get: async () =>
+                        ((await this.stateManager.retrieve('host')) as string) ?? '',
+                      set: async (v: string) => this.stateManager.store('host', v),
+                    }),
+                  }),
+                  App.createDUISecureInputField({
+                    id: 'token',
+                    label: 'API Token',
+                    value: App.createDUIBinding({
+                      get: async () =>
+                        ((await this.stateManager.retrieve('token')) as string) ?? '',
+                      set: async (v: string) => this.stateManager.store('token', v),
+                    }),
+                  }),
+                ],
+              }),
+              App.createDUISection({
+                id: 'testing',
+                header: 'Prueba de Conexión',
+                isHidden: false,
+                rows: async () => [
+                  App.createDUIButton({
+                    id: 'test_connection',
+                    label: 'Probar Conexión',
+                    onTap: async () => {
+                      const host = ((await this.stateManager.retrieve('host')) as string) ?? ''
+                      const token = ((await this.stateManager.retrieve('token')) as string) ?? ''
+                      const cleaned = cleanHost(host)
+                      if (!cleaned) {
+                        throw new Error('Por favor, introduce el Host del Servidor primero.')
+                      }
+                      try {
+                        const testRequest = App.createRequest({
+                          url: `${cleaned}/api/v1/mangas`,
+                          method: 'GET',
+                          headers: {
+                            Authorization: `Bearer ${token}`,
+                            'Content-Type': 'application/json',
+                          }
+                        })
+                        const testManager = App.createRequestManager({
+                          requestsPerSecond: 1,
+                          requestTimeout: 5000
+                        })
+                        const resp = await testManager.schedule(testRequest, 1)
+                        if (resp.status >= 400) {
+                          throw new Error(`Código de estado HTTP: ${resp.status}`)
+                        }
+                        const data = JSON.parse(resp.data ?? '[]')
+                        if (!Array.isArray(data)) {
+                          throw new Error('La respuesta del servidor no tiene el formato esperado.')
+                        }
+                        throw new Error(`¡Conexión exitosa! Encontrados ${data.length} mangas en tu biblioteca.`)
+                      } catch (err: any) {
+                        if (err.message.includes('¡Conexión exitosa!')) {
+                          throw err
+                        }
+                        throw new Error(`Fallo de conexión: ${err.message || err}`)
+                      }
+                    }
+                  })
+                ]
+              })
+            ]
+          })
+        })
       ],
     })
   }
