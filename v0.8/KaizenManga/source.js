@@ -729,7 +729,7 @@ var _Sources = (() => {
   });
   var import_types = __toESM(require_lib());
   var KaizenMangaInfo = {
-    version: "1.4.0",
+    version: "1.4.1",
     name: "Kaizen Manga",
     icon: "icon.png",
     author: "D4nj3s (DanielJNavas)",
@@ -798,6 +798,15 @@ var _Sources = (() => {
         requestTimeout: 2e4,
         interceptor: new KaizenInterceptor(this.stateManager)
       });
+    }
+    async getCachedMangas(host) {
+      const now = Date.now();
+      if (this._mangasCache && now - this._mangasCache.timestamp < 15e3) {
+        return this._mangasCache.data;
+      }
+      const data = await this.apiFetch(`${host}/api/v1/mangas`);
+      this._mangasCache = { data, timestamp: now };
+      return data;
     }
     async creds() {
       const host = await this.stateManager.retrieve("host") ?? "";
@@ -875,7 +884,7 @@ var _Sources = (() => {
       const tags = (raw.metadata?.genres ?? []).map(
         (g) => App.createTag({ id: g, label: g })
       );
-      const tagSections = tags.length ? [App.createTagSection({ id: "genres", label: "G\xE9neros", tags })] : [];
+      const tagSections = tags.length ? [App.createTagSection({ id: "genres", label: "Genres", tags })] : [];
       return App.createSourceManga({
         id: mangaId,
         mangaInfo: App.createMangaInfo({
@@ -925,7 +934,7 @@ var _Sources = (() => {
     async getSearchResults(query, _metadata) {
       try {
         const { host, token } = await this.creds();
-        const raw = await this.apiFetch(`${host}/api/v1/mangas`);
+        const raw = await this.getCachedMangas(host);
         let results = raw;
         const term = (query.title ?? "").toLowerCase().trim();
         if (term) {
@@ -955,7 +964,7 @@ var _Sources = (() => {
     async getSearchTags() {
       try {
         const { host } = await this.creds();
-        const raw = await this.apiFetch(`${host}/api/v1/mangas`);
+        const raw = await this.getCachedMangas(host);
         const genreSet = /* @__PURE__ */ new Set();
         for (const m of raw) {
           for (const g of m.metadata?.genres ?? []) {
@@ -968,7 +977,7 @@ var _Sources = (() => {
         return [
           App.createTagSection({
             id: "genres",
-            label: "G\xE9neros",
+            label: "Genres",
             tags
           })
         ];
@@ -980,10 +989,10 @@ var _Sources = (() => {
     async getHomePageSections(sectionCallback) {
       try {
         const { host, token } = await this.creds();
-        const raw = await this.apiFetch(`${host}/api/v1/mangas`);
+        const raw = await this.getCachedMangas(host);
         const genresSection = App.createHomeSection({
           id: "genres_section",
-          title: "G\xE9neros",
+          title: "Genres",
           containsMoreItems: false,
           type: import_types.HomeSectionType.singleRowNormal,
           items: []
@@ -1055,7 +1064,11 @@ var _Sources = (() => {
         sectionCallback(unreadSection);
         const libraryMap = /* @__PURE__ */ new Map();
         for (const m of raw) {
-          const libName = m.library?.name?.trim() || m.library?.path?.split(/[/\\]/).pop() || "Biblioteca";
+          let libName = m.library?.name?.trim();
+          if (!libName) {
+            const folderName = m.library?.path?.split(/[/\\]/).pop();
+            libName = folderName && folderName !== "data" ? folderName : "Library";
+          }
           if (!libraryMap.has(libName)) {
             libraryMap.set(libName, []);
           }
@@ -1102,7 +1115,7 @@ var _Sources = (() => {
     async getViewMoreItems(homepageSectionId, _metadata) {
       try {
         const { host, token } = await this.creds();
-        const raw = await this.apiFetch(`${host}/api/v1/mangas`);
+        const raw = await this.getCachedMangas(host);
         let results = raw;
         if (homepageSectionId === "recent") {
           results = [...raw].sort((a, b) => b.id - a.id);
@@ -1116,7 +1129,11 @@ var _Sources = (() => {
           );
         } else if (homepageSectionId.startsWith("lib_")) {
           results = raw.filter((m) => {
-            const libName = m.library?.name?.trim() || m.library?.path?.split(/[/\\]/).pop() || "Biblioteca";
+            let libName = m.library?.name?.trim();
+            if (!libName) {
+              const folderName = m.library?.path?.split(/[/\\]/).pop();
+              libName = folderName && folderName !== "data" ? folderName : "Library";
+            }
             const libId = `lib_${libName.toLowerCase().replace(/[^a-z0-9]+/g, "_")}`;
             return libId === homepageSectionId;
           });
