@@ -22,6 +22,9 @@ import {
   MangaProgressProviding,
   MangaProgress,
   TrackerActionQueue,
+  Request as PBRequest,
+  Response as PBResponse,
+  SourceInterceptor,
 } from '@paperback/types'
 import { CheerioAPI } from 'cheerio'
 
@@ -34,7 +37,7 @@ declare const App: any
 // This object is evaluated in Node by the toolchain to generate versioning.json.
 // It must be plain data — no runtime globals.
 export const KaizenMangaInfo: SourceInfo = {
-  version: '1.0.6',
+  version: '1.0.8',
   name: 'Kaizen Manga',
   icon: 'icon.png',
   author: 'D4nj3s (DanielJNavas)',
@@ -64,6 +67,41 @@ function cleanHost(raw: string): string {
   return h
 }
 
+function getCoverUrl(metadata: any, host: string, token: string): string {
+  const cover = metadata?.cover
+  if (!cover) {
+    return 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"/>'
+  }
+  if (cover.startsWith('http://') || cover.startsWith('https://')) {
+    return cover
+  }
+  const cleanCover = cover.startsWith('/') ? cover : '/' + cover
+  return `${host}${cleanCover}?token=${encodeURIComponent(token)}`
+}
+
+class KaizenInterceptor implements SourceInterceptor {
+  stateManager: SourceStateManager
+
+  constructor(stateManager: SourceStateManager) {
+    this.stateManager = stateManager
+  }
+
+  async interceptRequest(request: PBRequest): Promise<PBRequest> {
+    const token = ((await this.stateManager.retrieve('token')) as string) ?? ''
+    if (token) {
+      if (!request.headers) {
+        request.headers = {}
+      }
+      request.headers['Authorization'] = `Bearer ${token.trim()}`
+    }
+    return request
+  }
+
+  async interceptResponse(response: PBResponse): Promise<PBResponse> {
+    return response
+  }
+}
+
 // ─── Source Class ─────────────────────────────────────────────────────────────
 export class KaizenManga extends Source implements MangaProgressProviding {
   requestManager: RequestManager
@@ -71,15 +109,16 @@ export class KaizenManga extends Source implements MangaProgressProviding {
 
   constructor(cheerio: CheerioAPI) {
     super(cheerio)
+    this.stateManager = App.createSourceStateManager()
     this.requestManager = App.createRequestManager({
       requestsPerSecond: 5,
       requestTimeout: 20000,
+      interceptor: new KaizenInterceptor(this.stateManager),
     })
-    this.stateManager = App.createSourceStateManager()
   }
 
   private async creds(): Promise<{ host: string; token: string }> {
-    const host  = ((await this.stateManager.retrieve('host')) as string) ?? ''
+    const host = ((await this.stateManager.retrieve('host')) as string) ?? ''
     const token = ((await this.stateManager.retrieve('token')) as string) ?? ''
     const cleaned = cleanHost(host)
     if (!cleaned) {
@@ -119,10 +158,10 @@ export class KaizenManga extends Source implements MangaProgressProviding {
         }),
       })
     }
-    const { host } = await this.creds()
+    const { host, token } = await this.creds()
     const raw = await this.apiFetch(`${host}/api/v1/mangas/${mangaId}`)
 
-    const tags: Tag[] = (raw.genres ?? []).map((g: string) =>
+    const tags: Tag[] = (raw.metadata?.genres ?? []).map((g: string) =>
       App.createTag({ id: g, label: g })
     )
     const tagSections: TagSection[] = tags.length
@@ -133,12 +172,12 @@ export class KaizenManga extends Source implements MangaProgressProviding {
       id: mangaId,
       mangaInfo: App.createMangaInfo({
         titles: [raw.title ?? 'Sin título'],
-        image: raw.coverUrl ?? '',
-        author: raw.author ?? raw.artist ?? 'Desconocido',
-        artist: raw.artist ?? '',
-        desc: raw.description ?? 'Sin descripción.',
+        image: getCoverUrl(raw.metadata, host, token),
+        author: raw.metadata?.authors?.join(', ') || 'Desconocido',
+        artist: '',
+        desc: raw.metadata?.summary || 'Sin descripción.',
         tags: tagSections,
-        status: 'Ongoing',
+        status: raw.metadata?.status === 'ONGOING' ? 'Ongoing' : 'Completed',
       }),
     })
   }
@@ -180,7 +219,7 @@ export class KaizenManga extends Source implements MangaProgressProviding {
   // ─── getSearchResults ─────────────────────────────────────────────────────
   async getSearchResults(query: SearchRequest, _metadata: any): Promise<PagedResults> {
     try {
-      const { host } = await this.creds()
+      const { host, token } = await this.creds()
       const raw: any[] = await this.apiFetch(`${host}/api/v1/mangas`)
       const term = (query.title ?? '').toLowerCase().trim()
       const filtered = term
@@ -192,7 +231,7 @@ export class KaizenManga extends Source implements MangaProgressProviding {
           App.createPartialSourceManga({
             mangaId: String(m.id),
             title: m.title ?? 'Sin título',
-            image: m.coverUrl ?? '',
+            image: getCoverUrl(m.metadata, host, token),
             subtitle: m.readingStatus
               ? `${m.readingStatus.readChapters}/${m.readingStatus.totalChapters} cap.`
               : undefined,
@@ -209,7 +248,7 @@ export class KaizenManga extends Source implements MangaProgressProviding {
     sectionCallback: (section: HomeSection) => void
   ): Promise<void> {
     try {
-      const { host } = await this.creds()
+      const { host, token } = await this.creds()
       const raw: any[] = await this.apiFetch(`${host}/api/v1/mangas`)
 
       // Recently added
@@ -218,6 +257,7 @@ export class KaizenManga extends Source implements MangaProgressProviding {
         title: 'Recientemente Añadidos',
         containsMoreItems: true,
         type: HomeSectionType.singleRowNormal,
+        items: [],
       })
       sectionCallback(recentSection)
       recentSection.items = [...raw]
@@ -227,7 +267,7 @@ export class KaizenManga extends Source implements MangaProgressProviding {
           App.createPartialSourceManga({
             mangaId: String(m.id),
             title: m.title ?? 'Sin título',
-            image: m.coverUrl ?? '',
+            image: getCoverUrl(m.metadata, host, token),
           })
         )
       sectionCallback(recentSection)
@@ -238,6 +278,7 @@ export class KaizenManga extends Source implements MangaProgressProviding {
         title: 'Capítulos Sin Leer',
         containsMoreItems: true,
         type: HomeSectionType.singleRowNormal,
+        items: [],
       })
       sectionCallback(unreadSection)
       unreadSection.items = raw
@@ -247,7 +288,7 @@ export class KaizenManga extends Source implements MangaProgressProviding {
           App.createPartialSourceManga({
             mangaId: String(m.id),
             title: m.title ?? 'Sin título',
-            image: m.coverUrl ?? '',
+            image: getCoverUrl(m.metadata, host, token),
             subtitle: `${m.readingStatus.unreadChapters} sin leer`,
           })
         )
@@ -258,13 +299,14 @@ export class KaizenManga extends Source implements MangaProgressProviding {
         title: 'Configuración Requerida',
         containsMoreItems: false,
         type: HomeSectionType.singleRowNormal,
+        items: [],
       })
       sectionCallback(setupSection)
       setupSection.items = [
         App.createPartialSourceManga({
           mangaId: 'setup_help',
           title: 'Toca aquí para ver cómo configurar la extensión',
-          image: '',
+          image: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"/>',
         })
       ]
       sectionCallback(setupSection)
@@ -276,7 +318,7 @@ export class KaizenManga extends Source implements MangaProgressProviding {
     _metadata: any
   ): Promise<PagedResults> {
     try {
-      const { host } = await this.creds()
+      const { host, token } = await this.creds()
       const raw: any[] = await this.apiFetch(`${host}/api/v1/mangas`)
       let results = raw
       if (homepageSectionId === 'recent') {
@@ -291,7 +333,7 @@ export class KaizenManga extends Source implements MangaProgressProviding {
           App.createPartialSourceManga({
             mangaId: String(m.id),
             title: m.title ?? 'Sin título',
-            image: m.coverUrl ?? '',
+            image: getCoverUrl(m.metadata, host, token),
           })
         ),
       })
@@ -348,7 +390,7 @@ export class KaizenManga extends Source implements MangaProgressProviding {
                     value: App.createDUIBinding({
                       get: async () =>
                         ((await this.stateManager.retrieve('status')) as string) ?? 'Sin verificar',
-                      set: async (v: string) => {},
+                      set: async (v: string) => { },
                     }),
                   }),
                   App.createDUIButton({
@@ -362,9 +404,9 @@ export class KaizenManga extends Source implements MangaProgressProviding {
                         await this.stateManager.store('status', 'Error: Host vacío')
                         return
                       }
-                      
+
                       await this.stateManager.store('status', 'Probando conexión...')
-                      
+
                       try {
                         const testRequest = App.createRequest({
                           url: `${cleaned}/api/v1/mangas`,
