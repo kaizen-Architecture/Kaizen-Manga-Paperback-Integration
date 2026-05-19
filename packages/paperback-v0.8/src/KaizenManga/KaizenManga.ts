@@ -37,7 +37,7 @@ declare const App: any
 // This object is evaluated in Node by the toolchain to generate versioning.json.
 // It must be plain data — no runtime globals.
 export const KaizenMangaInfo: SourceInfo = {
-  version: '1.4.1',
+  version: '1.4.2',
   name: 'Kaizen Manga',
   icon: 'icon.png',
   author: 'D4nj3s (DanielJNavas)',
@@ -435,11 +435,7 @@ export class KaizenManga extends Source implements MangaProgressProviding {
       // Group by library dynamically
       const libraryMap = new Map<string, any[]>()
       for (const m of raw) {
-        let libName = m.library?.name?.trim()
-        if (!libName) {
-          const folderName = m.library?.path?.split(/[/\\]/).pop()
-          libName = (folderName && folderName !== 'data') ? folderName : 'Library'
-        }
+        const libName = m.library?.name?.trim() || 'Library'
         if (!libraryMap.has(libName)) {
           libraryMap.set(libName, [])
         }
@@ -505,11 +501,7 @@ export class KaizenManga extends Source implements MangaProgressProviding {
         )
       } else if (homepageSectionId.startsWith('lib_')) {
         results = raw.filter((m) => {
-          let libName = m.library?.name?.trim()
-          if (!libName) {
-            const folderName = m.library?.path?.split(/[/\\]/).pop()
-            libName = (folderName && folderName !== 'data') ? folderName : 'Library'
-          }
+          const libName = m.library?.name?.trim() || 'Library'
           const libId = `lib_${libName.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`
           return libId === homepageSectionId
         })
