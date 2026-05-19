@@ -37,7 +37,7 @@ declare const App: any
 // This object is evaluated in Node by the toolchain to generate versioning.json.
 // It must be plain data — no runtime globals.
 export const KaizenMangaInfo: SourceInfo = {
-  version: '1.1.0',
+  version: '1.2.0',
   name: 'Kaizen Manga',
   icon: 'icon.png',
   author: 'D4nj3s (DanielJNavas)',
@@ -87,20 +87,25 @@ class KaizenInterceptor implements SourceInterceptor {
   }
 
   async interceptRequest(request: PBRequest): Promise<PBRequest> {
-    const token = ((await this.stateManager.retrieve('token')) as string) ?? ''
-    if (token) {
-      const headers = { ...(request.headers ?? {}) }
-      headers['Authorization'] = `Bearer ${token.trim()}`
-      return App.createRequest({
-        url: request.url,
-        method: request.method,
-        headers,
-        data: request.data,
-        param: request.param,
-        cookies: request.cookies,
-      })
+    let url = request.url
+    if (url.startsWith('FAKE*')) {
+      url = url.split('*REAL*').pop() ?? ''
     }
-    return request
+
+    const token = ((await this.stateManager.retrieve('token')) as string) ?? ''
+    const headers = { ...(request.headers ?? {}) }
+    if (token) {
+      headers['Authorization'] = `Bearer ${token.trim()}`
+    }
+
+    return App.createRequest({
+      url,
+      method: request.method,
+      headers,
+      data: request.data,
+      param: request.param,
+      cookies: request.cookies,
+    })
   }
 
   async interceptResponse(response: PBResponse): Promise<PBResponse> {
@@ -212,13 +217,12 @@ export class KaizenManga extends Source implements MangaProgressProviding {
     if (mangaId === 'setup_help') {
       return App.createChapterDetails({ id: chapterId, mangaId, pages: [] })
     }
-    const { host, token } = await this.creds()
+    const { host } = await this.creds()
     const raw = await this.apiFetch(
       `${host}/api/v1/mangas/${mangaId}/chapters/${chapterId}/pages`
     )
     const pages: string[] = (raw.pages ?? []).map((p: any) => {
-      const separator = p.url.includes('?') ? '&' : '?'
-      return `${host}${p.url}${separator}token=${encodeURIComponent(token)}`
+      return `FAKE*/page_${p.index}.png?*REAL*${host}${p.url}`
     })
     return App.createChapterDetails({ id: chapterId, mangaId, pages })
   }
@@ -356,93 +360,71 @@ export class KaizenManga extends Source implements MangaProgressProviding {
       header: 'Configuración de Kaizen Downloader',
       isHidden: false,
       rows: async () => [
-        App.createDUINavigationButton({
-          id: 'server_settings',
-          label: 'Configuración del Servidor',
-          form: App.createDUIForm({
-            sections: async () => [
-              App.createDUISection({
-                id: 'connection',
-                header: 'Detalles del Servidor Kaizen',
-                isHidden: false,
-                rows: async () => [
-                  App.createDUIInputField({
-                    id: 'host',
-                    label: 'Host del Servidor',
-                    value: App.createDUIBinding({
-                      get: async () =>
-                        ((await this.stateManager.retrieve('host')) as string) ?? '',
-                      set: async (v: string) => this.stateManager.store('host', v),
-                    }),
-                  }),
-                  App.createDUISecureInputField({
-                    id: 'token',
-                    label: 'API Token',
-                    value: App.createDUIBinding({
-                      get: async () =>
-                        ((await this.stateManager.retrieve('token')) as string) ?? '',
-                      set: async (v: string) => this.stateManager.store('token', v),
-                    }),
-                  }),
-                ],
-              }),
-              App.createDUISection({
-                id: 'testing',
-                header: 'Prueba de Conexión',
-                isHidden: false,
-                rows: async () => [
-                  App.createDUIInputField({
-                    id: 'status',
-                    label: 'Resultado',
-                    value: App.createDUIBinding({
-                      get: async () =>
-                        ((await this.stateManager.retrieve('status')) as string) ?? 'Sin verificar',
-                      set: async (v: string) => { },
-                    }),
-                  }),
-                  App.createDUIButton({
-                    id: 'test_connection',
-                    label: 'Probar Conexión',
-                    onTap: async () => {
-                      const host = ((await this.stateManager.retrieve('host')) as string) ?? ''
-                      const token = ((await this.stateManager.retrieve('token')) as string) ?? ''
-                      const cleaned = cleanHost(host)
-                      if (!cleaned) {
-                        await this.stateManager.store('status', 'Error: Host vacío')
-                        return
-                      }
+        App.createDUIInputField({
+          id: 'host',
+          label: 'Host del Servidor',
+          value: App.createDUIBinding({
+            get: async () =>
+              ((await this.stateManager.retrieve('host')) as string) ?? '',
+            set: async (v: string) => this.stateManager.store('host', v),
+          }),
+        }),
+        App.createDUISecureInputField({
+          id: 'token',
+          label: 'API Token',
+          value: App.createDUIBinding({
+            get: async () =>
+              ((await this.stateManager.retrieve('token')) as string) ?? '',
+            set: async (v: string) => this.stateManager.store('token', v),
+          }),
+        }),
+        App.createDUIInputField({
+          id: 'status',
+          label: 'Resultado',
+          value: App.createDUIBinding({
+            get: async () =>
+              ((await this.stateManager.retrieve('status')) as string) ?? 'Sin verificar',
+            set: async (v: string) => { },
+          }),
+        }),
+        App.createDUIButton({
+          id: 'test_connection',
+          label: 'Probar Conexión',
+          onTap: async () => {
+            const host = ((await this.stateManager.retrieve('host')) as string) ?? ''
+            const token = ((await this.stateManager.retrieve('token')) as string) ?? ''
+            const cleaned = cleanHost(host)
+            if (!cleaned) {
+              await this.stateManager.store('status', 'Error: Host vacío')
+              return
+            }
 
-                      await this.stateManager.store('status', 'Probando conexión...')
+            await this.stateManager.store('status', 'Probando conexión...')
 
-                      try {
-                        const testRequest = App.createRequest({
-                          url: `${cleaned}/api/v1/mangas`,
-                          method: 'GET',
-                          headers: {
-                            Authorization: `Bearer ${token}`,
-                            'Content-Type': 'application/json',
-                          }
-                        })
-                        const resp = await this.requestManager.schedule(testRequest, 1)
-                        if (resp.status >= 400) {
-                          await this.stateManager.store('status', `Error HTTP: ${resp.status}`)
-                          return
-                        }
-                        const data = JSON.parse(resp.data ?? '[]')
-                        if (!Array.isArray(data)) {
-                          await this.stateManager.store('status', 'Error: JSON inválido')
-                          return
-                        }
-                        await this.stateManager.store('status', `¡Éxito! (${data.length} mangas)`)
-                      } catch (err: any) {
-                        await this.stateManager.store('status', `Error: ${err.message || String(err)}`)
-                      }
-                    }
-                  })
-                ]
+            try {
+              const testRequest = App.createRequest({
+                url: `${cleaned}/api/v1/mangas`,
+                method: 'GET',
+                headers: {
+                  Authorization: `Bearer ${token}`,
+                  'Content-Type': 'application/json',
+                }
               })
-            ]
-          })
+              const resp = await this.requestManager.schedule(testRequest, 1)
+              if (resp.status >= 400) {
+                await this.stateManager.store('status', `Error HTTP: ${resp.status}`)
+                return
+              }
+              const data = JSON.parse(resp.data ?? '[]')
+              if (!Array.isArray(data)) {
+                await this.stateManager.store('status', 'Error: JSON inválido')
+                return
+              }
+              await this.stateManager.store('status', `¡Éxito! (${data.length} mangas)`)
+            } catch (err: any) {
+              await this.stateManager.store('status', `Error: ${err.message || String(err)}`)
+            }
+          }
         })
       ],
     })
