@@ -729,7 +729,7 @@ var _Sources = (() => {
   });
   var import_types = __toESM(require_lib());
   var KaizenMangaInfo = {
-    version: "1.4.2",
+    version: "1.4.3",
     name: "Kaizen Manga",
     icon: "icon.png",
     author: "D4nj3s (DanielJNavas)",
@@ -859,26 +859,6 @@ var _Sources = (() => {
           })
         });
       }
-      if (mangaId.startsWith("genre:")) {
-        const genreName = mangaId.substring(6);
-        return App.createSourceManga({
-          id: mangaId,
-          mangaInfo: App.createMangaInfo({
-            titles: [genreName],
-            image: `data:image/svg+xml;utf8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="300" height="400" viewBox="0 0 300 400"><rect width="300" height="400" fill="#1a1a1a"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="#ffffff" font-family="sans-serif" font-size="24" font-weight="bold">${genreName.toUpperCase()}</text></svg>`)}`,
-            author: "Kaizen",
-            desc: `Toca el tag "${genreName}" a continuaci\xF3n para ver todos los mangas en este g\xE9nero.`,
-            tags: [
-              App.createTagSection({
-                id: "genres",
-                label: "G\xE9neros",
-                tags: [App.createTag({ id: genreName, label: genreName })]
-              })
-            ],
-            status: "Completed"
-          })
-        });
-      }
       const { host, token } = await this.creds();
       const raw = await this.apiFetch(`${host}/api/v1/mangas/${mangaId}`);
       const tags = (raw.metadata?.genres ?? []).map(
@@ -900,7 +880,7 @@ var _Sources = (() => {
     }
     // ─── getChapters ──────────────────────────────────────────────────────────
     async getChapters(mangaId) {
-      if (mangaId === "setup_help" || mangaId.startsWith("genre:")) {
+      if (mangaId === "setup_help") {
         return [];
       }
       const { host } = await this.creds();
@@ -990,28 +970,6 @@ var _Sources = (() => {
       try {
         const { host, token } = await this.creds();
         const raw = await this.getCachedMangas(host);
-        const genresSection = App.createHomeSection({
-          id: "genres_section",
-          title: "Genres",
-          containsMoreItems: false,
-          type: import_types.HomeSectionType.singleRowNormal,
-          items: []
-        });
-        sectionCallback(genresSection);
-        const genreSet = /* @__PURE__ */ new Set();
-        for (const m of raw) {
-          for (const g of m.metadata?.genres ?? []) {
-            if (g) genreSet.add(g);
-          }
-        }
-        genresSection.items = Array.from(genreSet).sort().map(
-          (g) => App.createPartialSourceManga({
-            mangaId: `genre:${g}`,
-            title: g,
-            image: `data:image/svg+xml;utf8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="300" height="400" viewBox="0 0 300 400"><rect width="300" height="400" fill="#1a1a1a"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="#ffffff" font-family="sans-serif" font-size="24" font-weight="bold">${g.toUpperCase()}</text></svg>`)}`
-          })
-        );
-        sectionCallback(genresSection);
         const onDeckSection = App.createHomeSection({
           id: "on_deck",
           title: "En Curso (On Deck)",
