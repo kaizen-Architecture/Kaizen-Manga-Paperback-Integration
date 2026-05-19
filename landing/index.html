@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kaizen Manga - Conector de Paperback</title>
+  <!-- Google Fonts: Inter & Outfit -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;600;800&display=swap" rel="stylesheet">
+  
+  <style>
+    :root {
+      --bg-primary: #0a0c10;
+      --bg-secondary: #121620;
+      --accent: #00d2c4;
+      --accent-hover: #00b3a7;
+      --text-main: #f3f4f6;
+      --text-muted: #9ca3af;
+      --glass-bg: rgba(18, 22, 32, 0.7);
+      --glass-border: rgba(255, 255, 255, 0.08);
+      --shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: var(--bg-primary);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem 1rem;
+      background-image: 
+        radial-gradient(circle at 10% 20%, rgba(0, 210, 196, 0.05) 0%, transparent 40%),
+        radial-gradient(circle at 90% 80%, rgba(0, 210, 196, 0.05) 0%, transparent 40%);
+      overflow-x: hidden;
+    }
+
+    .container {
+      max-width: 650px;
+      width: 100%;
+      background: var(--glass-bg);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid var(--glass-border);
+      border-radius: 24px;
+      padding: 3rem 2rem;
+      box-shadow: var(--shadow);
+      text-align: center;
+      position: relative;
+      animation: fadeIn 0.8s ease-out;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .logo-container {
+      margin-bottom: 2rem;
+      display: inline-block;
+      position: relative;
+    }
+
+    .logo-icon {
+      width: 96px;
+      height: 96px;
+      border-radius: 22px;
+      box-shadow: 0 0 30px rgba(0, 210, 196, 0.3);
+      border: 2px solid var(--accent);
+      transition: transform 0.3s ease;
+    }
+
+    .logo-container:hover .logo-icon {
+      transform: scale(1.05) rotate(3deg);
+    }
+
+    h1 {
+      font-family: 'Outfit', sans-serif;
+      font-size: 2.5rem;
+      font-weight: 800;
+      margin-bottom: 0.5rem;
+      background: linear-gradient(135deg, #ffffff 30%, var(--accent) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      letter-spacing: -0.02em;
+    }
+
+    .subtitle {
+      font-size: 1.1rem;
+      color: var(--text-muted);
+      margin-bottom: 2.5rem;
+      font-weight: 300;
+    }
+
+    .version-card {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      border-radius: 16px;
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+      text-align: left;
+      transition: transform 0.2s ease, border-color 0.2s ease;
+    }
+
+    .version-card:hover {
+      transform: translateY(-2px);
+      border-color: rgba(0, 210, 196, 0.2);
+    }
+
+    .version-title {
+      font-family: 'Outfit', sans-serif;
+      font-size: 1.25rem;
+      font-weight: 600;
+      color: #ffffff;
+      margin-bottom: 0.5rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .badge {
+      font-size: 0.75rem;
+      padding: 0.2rem 0.6rem;
+      border-radius: 50px;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+
+    .badge-stable {
+      background: rgba(0, 210, 196, 0.15);
+      color: var(--accent);
+      border: 1px solid rgba(0, 210, 196, 0.3);
+    }
+
+    .badge-wip {
+      background: rgba(245, 158, 11, 0.15);
+      color: #f59e0b;
+      border: 1px solid rgba(245, 158, 11, 0.3);
+    }
+
+    .version-desc {
+      font-size: 0.95rem;
+      color: var(--text-muted);
+      margin-bottom: 1.25rem;
+      line-height: 1.5;
+    }
+
+    .btn-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+    }
+
+    .btn {
+      flex: 1;
+      min-width: 200px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0.85rem 1.5rem;
+      border-radius: 12px;
+      font-weight: 600;
+      font-size: 0.95rem;
+      text-decoration: none;
+      transition: all 0.2s ease;
+      cursor: pointer;
+    }
+
+    .btn-primary {
+      background-color: var(--accent);
+      color: #000000;
+      box-shadow: 0 4px 14px rgba(0, 210, 196, 0.3);
+    }
+
+    .btn-primary:hover {
+      background-color: var(--accent-hover);
+      transform: translateY(-1px);
+      box-shadow: 0 6px 20px rgba(0, 210, 196, 0.4);
+    }
+
+    .btn-secondary {
+      background-color: rgba(255, 255, 255, 0.08);
+      color: #ffffff;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .btn-secondary:hover {
+      background-color: rgba(255, 255, 255, 0.15);
+    }
+
+    .copy-toast {
+      position: fixed;
+      bottom: 2rem;
+      background: #10b981;
+      color: white;
+      padding: 0.75rem 1.5rem;
+      border-radius: 50px;
+      font-weight: 500;
+      box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+      opacity: 0;
+      transform: translateY(100px);
+      transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      z-index: 100;
+    }
+
+    .copy-toast.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    footer {
+      margin-top: 3rem;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+
+    footer a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+
+    footer a:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <div class="logo-container">
+      <img src="icon.png" alt="Kaizen Manga Logo" class="logo-icon">
+    </div>
+    
+    <h1>Kaizen Manga</h1>
+    <p class="subtitle">Extensión oficial para conectar Paperback iOS con tu servidor de descargas</p>
+
+    <!-- Versión 0.8 -->
+    <div class="version-card">
+      <div class="version-title">
+        Paperback v0.8.x 
+        <span class="badge badge-stable">Estable</span>
+      </div>
+      <p class="version-desc">
+        Compatible con la última versión de Paperback disponible en iOS (incluyendo <strong>v0.8.11-r1</strong>). Soporta exploración de biblioteca, secciones de inicio dinámicas y visualización fluida de capítulos locales.
+      </p>
+      <div class="btn-group">
+        <a href="paperback://addRepo?url=https://danijes.github.io/Kaizen-Manga-Paperback-Integration/v0.8" class="btn btn-primary">
+          Añadir a Paperback 🚀
+        </a>
+        <button onclick="copyToClipboard('https://danijes.github.io/Kaizen-Manga-Paperback-Integration/v0.8')" class="btn btn-secondary">
+          Copiar URL del Repo 📋
+        </button>
+      </div>
+    </div>
+
+    <!-- Versión 0.9 -->
+    <div class="version-card">
+      <div class="version-title">
+        Paperback v0.9.x
+        <span class="badge badge-wip">WIP / Alpha</span>
+      </div>
+      <p class="version-desc">
+        Soporte para el nuevo framework y SDK v6 de Paperback v0.9+. Actualmente compilado como stub inicial para compatibilidad futura.
+      </p>
+      <div class="btn-group">
+        <a href="paperback://addRepo?url=https://danijes.github.io/Kaizen-Manga-Paperback-Integration/v0.9" class="btn btn-primary">
+          Añadir a Paperback 🚀
+        </a>
+        <button onclick="copyToClipboard('https://danijes.github.io/Kaizen-Manga-Paperback-Integration/v0.9')" class="btn btn-secondary">
+          Copiar URL del Repo 📋
+        </button>
+      </div>
+    </div>
+
+    <footer>
+      <p>Desarrollado para <a href="https://github.com/kaizen-Architecture" target="_blank">Kaizen Architecture</a></p>
+    </footer>
+  </div>
+
+  <div id="toast" class="copy-toast">¡Enlace copiado con éxito!</div>
+
+  <script>
+    function copyToClipboard(text) {
+      navigator.clipboard.writeText(text).then(() => {
+        const toast = document.getElementById('toast');
+        toast.classList.add('show');
+        setTimeout(() => {
+          toast.classList.remove('show');
+        }, 2000);
+      });
+    }
+  </script>
+</body>
+</html>

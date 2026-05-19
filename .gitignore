@@ -1,0 +1,13 @@
+# Node dependencies
+node_modules/
+package-lock.json
+
+# Local bundles & build outputs
+dist/
+bundles/
+public/
+*.tsbuildinfo
+
+# OS metadata
+.DS_Store
+Thumbs.db

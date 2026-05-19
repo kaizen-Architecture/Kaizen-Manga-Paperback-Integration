@@ -1,0 +1,19 @@
+{
+  "name": "paperback-extension-kaizen-v0.9",
+  "version": "1.0.0",
+  "repositoryName": "Kaizen Manga (v0.9)",
+  "description": "Accede a tu biblioteca local de Kaizen Manga Downloader directamente desde Paperback iOS v0.9.",
+  "main": "dist/bundle.js",
+  "scripts": {
+    "build": "npx --package=@paperback/toolchain paperback bundle",
+    "serve": "npx --package=@paperback/toolchain paperback serve"
+  },
+  "dependencies": {
+    "@kaizen-manga-paperback/core": "file:../core",
+    "@paperback/types": "1.0.0-alpha.87"
+  },
+  "devDependencies": {
+    "@paperback/toolchain": "1.0.0-alpha.87",
+    "typescript": "^4.9.5"
+  }
+}

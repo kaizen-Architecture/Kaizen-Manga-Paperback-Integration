@@ -1,0 +1,13 @@
+{
+  "name": "@kaizen-manga-paperback/core",
+  "version": "1.0.0",
+  "description": "Shared API client and data mapping logic for Kaizen Manga Downloader Paperback integration",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc"
+  },
+  "devDependencies": {
+    "typescript": "^4.9.5"
+  }
+}

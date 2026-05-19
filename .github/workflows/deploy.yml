@@ -1,0 +1,62 @@
+name: Build and Deploy Extensions to GitHub Pages
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Build Core Library
+        run: |
+          cd packages/core
+          npm install
+          npm run build
+
+      - name: Build Paperback v0.8 Extension
+        run: |
+          cd packages/paperback-v0.8
+          npm install
+          npm run build
+
+      - name: Build Paperback v0.9 Extension
+        run: |
+          cd packages/paperback-v0.9
+          npm install
+          npm run build
+
+      - name: Assemble GitHub Pages Directory
+        run: |
+          mkdir -p public
+          
+          # Copy landing page assets
+          cp -r landing/* public/
+          
+          # Create and populate v0.8 subfolder
+          mkdir -p public/v0.8
+          cp -r packages/paperback-v0.8/bundles/* public/v0.8/
+          
+          # Create and populate v0.9 subfolder
+          mkdir -p public/v0.9
+          cp -r packages/paperback-v0.9/bundles/* public/v0.9/
+
+      - name: Deploy to GitHub Pages
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          folder: public
+          branch: gh-pages
+          clean: true

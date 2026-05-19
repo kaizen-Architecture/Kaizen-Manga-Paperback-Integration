@@ -1,0 +1,15 @@
+{
+  "name": "kaizen-manga-paperback-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Monorepo containing Paperback v0.8 and v0.9 extension packages for Kaizen Manga Downloader",
+  "scripts": {
+    "bootstrap": "npm install",
+    "build:core": "npm --prefix packages/core run build",
+    "build:v0.8": "npm --prefix packages/paperback-v0.8 run build",
+    "build:v0.9": "npm --prefix packages/paperback-v0.9 run build",
+    "build:all": "npm run build:core && npm run build:v0.8 && npm run build:v0.9",
+    "serve:v0.8": "npm --prefix packages/paperback-v0.8 run serve",
+    "serve:v0.9": "npm --prefix packages/paperback-v0.9 run serve"
+  }
+}
