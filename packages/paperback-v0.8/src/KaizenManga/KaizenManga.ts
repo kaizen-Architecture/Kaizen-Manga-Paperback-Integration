@@ -19,6 +19,9 @@ import {
   DUISection,
   DUINavigationButton,
   DUIButton,
+  MangaProgressProviding,
+  MangaProgress,
+  TrackerActionQueue,
 } from '@paperback/types'
 import { CheerioAPI } from 'cheerio'
 
@@ -31,7 +34,7 @@ declare const App: any
 // This object is evaluated in Node by the toolchain to generate versioning.json.
 // It must be plain data — no runtime globals.
 export const KaizenMangaInfo: SourceInfo = {
-  version: '1.0.4',
+  version: '1.0.5',
   name: 'Kaizen Manga',
   icon: 'icon.png',
   author: 'D4nj3s (DanielJNavas)',
@@ -49,7 +52,8 @@ export const KaizenMangaInfo: SourceInfo = {
   intents:
     SourceIntents.MANGA_CHAPTERS |
     SourceIntents.HOMEPAGE_SECTIONS |
-    SourceIntents.SETTINGS_UI,
+    SourceIntents.SETTINGS_UI |
+    SourceIntents.MANGA_TRACKING,
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -61,7 +65,7 @@ function cleanHost(raw: string): string {
 }
 
 // ─── Source Class ─────────────────────────────────────────────────────────────
-export class KaizenManga extends Source {
+export class KaizenManga extends Source implements MangaProgressProviding {
   requestManager: RequestManager
   stateManager: SourceStateManager
 
@@ -385,5 +389,107 @@ export class KaizenManga extends Source {
         })
       ],
     })
+  }
+
+  // ─── Tracking ──────────────────────────────────────────────────────────────
+  async getMangaProgress(mangaId: string): Promise<MangaProgress | undefined> {
+    try {
+      const { host } = await this.creds()
+      const raw = await this.apiFetch(`${host}/api/v1/mangas/${mangaId}`)
+      if (!raw || !raw.chapters) return undefined
+
+      const readChapters = (raw.chapters ?? []).filter((ch: any) => ch.isRead)
+      let lastReadChapterNumber = 0
+      if (readChapters.length > 0) {
+        lastReadChapterNumber = Math.max(...readChapters.map((ch: any) => ch.index ?? 0))
+      }
+
+      return App.createMangaProgress({
+        mangaId,
+        lastReadChapterNumber,
+        lastReadVolumeNumber: 0,
+        trackedListName: 'Kaizen',
+        lastReadTime: new Date(),
+      })
+    } catch (err) {
+      return undefined
+    }
+  }
+
+  async getMangaProgressManagementForm(mangaId: string): Promise<DUIForm> {
+    return App.createDUIForm({
+      sections: async () => {
+        try {
+          const { host } = await this.creds()
+          const raw = await this.apiFetch(`${host}/api/v1/mangas/${mangaId}`)
+          const reading = raw.readingStatus ?? { readChapters: 0, totalChapters: 0 }
+          return [
+            App.createDUISection({
+              id: 'info',
+              header: 'Progreso de Lectura en Kaizen',
+              isHidden: false,
+              rows: async () => [
+                App.createDUILabel({
+                  id: 'progress',
+                  label: 'Capítulos Leídos',
+                  value: `${reading.readChapters} / ${reading.totalChapters}`,
+                }),
+              ],
+            }),
+          ]
+        } catch (err: any) {
+          return [
+            App.createDUISection({
+              id: 'error_section',
+              header: 'Error',
+              isHidden: false,
+              rows: async () => [
+                App.createDUILabel({
+                  id: 'error_msg',
+                  label: 'No se pudo conectar con el servidor',
+                  value: err.message || String(err),
+                }),
+              ],
+            }),
+          ]
+        }
+      },
+      onSubmit: async () => {
+        // No values to submit/edit directly on progress form
+      },
+    })
+  }
+
+  async processChapterReadActionQueue(actionQueue: TrackerActionQueue): Promise<void> {
+    try {
+      const chapterReadActions = await actionQueue.queuedChapterReadActions()
+      const { host } = await this.creds()
+
+      for (const readAction of chapterReadActions) {
+        try {
+          const mangaId = parseInt(readAction.sourceMangaId)
+          const chapterId = parseInt(readAction.sourceChapterId)
+          if (isNaN(mangaId) || isNaN(chapterId)) {
+            await actionQueue.discardChapterReadAction(readAction)
+            continue
+          }
+
+          const body = JSON.stringify({
+            chapters: [
+              {
+                id: chapterId,
+                isRead: true,
+              },
+            ],
+          })
+          await this.apiFetch(`${host}/api/v1/mangas/${mangaId}`, 'PATCH', body)
+          await actionQueue.discardChapterReadAction(readAction)
+        } catch (err) {
+          await actionQueue.retryChapterReadAction(readAction)
+        }
+      }
+    } catch (err) {
+      // If credentials or root call fails, retry everything
+    }
   }
 }
