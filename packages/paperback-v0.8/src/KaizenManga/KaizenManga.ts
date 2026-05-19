@@ -34,7 +34,7 @@ declare const App: any
 // This object is evaluated in Node by the toolchain to generate versioning.json.
 // It must be plain data — no runtime globals.
 export const KaizenMangaInfo: SourceInfo = {
-  version: '1.0.5',
+  version: '1.0.6',
   name: 'Kaizen Manga',
   icon: 'icon.png',
   author: 'D4nj3s (DanielJNavas)',
@@ -342,6 +342,15 @@ export class KaizenManga extends Source implements MangaProgressProviding {
                 header: 'Prueba de Conexión',
                 isHidden: false,
                 rows: async () => [
+                  App.createDUIInputField({
+                    id: 'status',
+                    label: 'Resultado',
+                    value: App.createDUIBinding({
+                      get: async () =>
+                        ((await this.stateManager.retrieve('status')) as string) ?? 'Sin verificar',
+                      set: async (v: string) => {},
+                    }),
+                  }),
                   App.createDUIButton({
                     id: 'test_connection',
                     label: 'Probar Conexión',
@@ -350,8 +359,12 @@ export class KaizenManga extends Source implements MangaProgressProviding {
                       const token = ((await this.stateManager.retrieve('token')) as string) ?? ''
                       const cleaned = cleanHost(host)
                       if (!cleaned) {
-                        throw new Error('Por favor, introduce el Host del Servidor primero.')
+                        await this.stateManager.store('status', 'Error: Host vacío')
+                        return
                       }
+                      
+                      await this.stateManager.store('status', 'Probando conexión...')
+                      
                       try {
                         const testRequest = App.createRequest({
                           url: `${cleaned}/api/v1/mangas`,
@@ -367,18 +380,17 @@ export class KaizenManga extends Source implements MangaProgressProviding {
                         })
                         const resp = await testManager.schedule(testRequest, 1)
                         if (resp.status >= 400) {
-                          throw new Error(`Código de estado HTTP: ${resp.status}`)
+                          await this.stateManager.store('status', `Error HTTP: ${resp.status}`)
+                          return
                         }
                         const data = JSON.parse(resp.data ?? '[]')
                         if (!Array.isArray(data)) {
-                          throw new Error('La respuesta del servidor no tiene el formato esperado.')
+                          await this.stateManager.store('status', 'Error: JSON inválido')
+                          return
                         }
-                        throw new Error(`¡Conexión exitosa! Encontrados ${data.length} mangas en tu biblioteca.`)
+                        await this.stateManager.store('status', `¡Éxito! (${data.length} mangas)`)
                       } catch (err: any) {
-                        if (err.message.includes('¡Conexión exitosa!')) {
-                          throw err
-                        }
-                        throw new Error(`Fallo de conexión: ${err.message || err}`)
+                        await this.stateManager.store('status', `Error: ${err.message || String(err)}`)
                       }
                     }
                   })
