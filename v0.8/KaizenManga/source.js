@@ -729,7 +729,7 @@ var _Sources = (() => {
   });
   var import_types = __toESM(require_lib());
   var KaizenMangaInfo = {
-    version: "1.0.6",
+    version: "1.0.8",
     name: "Kaizen Manga",
     icon: "icon.png",
     author: "D4nj3s (DanielJNavas)",
@@ -751,14 +751,44 @@ var _Sources = (() => {
     if (!h.startsWith("http://") && !h.startsWith("https://")) h = "http://" + h;
     return h;
   }
+  function getCoverUrl(metadata, host, token) {
+    const cover = metadata?.cover;
+    if (!cover) {
+      return 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"/>';
+    }
+    if (cover.startsWith("http://") || cover.startsWith("https://")) {
+      return cover;
+    }
+    const cleanCover = cover.startsWith("/") ? cover : "/" + cover;
+    return `${host}${cleanCover}?token=${encodeURIComponent(token)}`;
+  }
+  var KaizenInterceptor = class {
+    constructor(stateManager) {
+      this.stateManager = stateManager;
+    }
+    async interceptRequest(request) {
+      const token = await this.stateManager.retrieve("token") ?? "";
+      if (token) {
+        if (!request.headers) {
+          request.headers = {};
+        }
+        request.headers["Authorization"] = `Bearer ${token.trim()}`;
+      }
+      return request;
+    }
+    async interceptResponse(response) {
+      return response;
+    }
+  };
   var KaizenManga = class extends import_types.Source {
     constructor(cheerio) {
       super(cheerio);
+      this.stateManager = App.createSourceStateManager();
       this.requestManager = App.createRequestManager({
         requestsPerSecond: 5,
-        requestTimeout: 2e4
+        requestTimeout: 2e4,
+        interceptor: new KaizenInterceptor(this.stateManager)
       });
-      this.stateManager = App.createSourceStateManager();
     }
     async creds() {
       const host = await this.stateManager.retrieve("host") ?? "";
@@ -799,9 +829,9 @@ var _Sources = (() => {
           })
         });
       }
-      const { host } = await this.creds();
+      const { host, token } = await this.creds();
       const raw = await this.apiFetch(`${host}/api/v1/mangas/${mangaId}`);
-      const tags = (raw.genres ?? []).map(
+      const tags = (raw.metadata?.genres ?? []).map(
         (g) => App.createTag({ id: g, label: g })
       );
       const tagSections = tags.length ? [App.createTagSection({ id: "genres", label: "G\xE9neros", tags })] : [];
@@ -809,12 +839,12 @@ var _Sources = (() => {
         id: mangaId,
         mangaInfo: App.createMangaInfo({
           titles: [raw.title ?? "Sin t\xEDtulo"],
-          image: raw.coverUrl ?? "",
-          author: raw.author ?? raw.artist ?? "Desconocido",
-          artist: raw.artist ?? "",
-          desc: raw.description ?? "Sin descripci\xF3n.",
+          image: getCoverUrl(raw.metadata, host, token),
+          author: raw.metadata?.authors?.join(", ") || "Desconocido",
+          artist: "",
+          desc: raw.metadata?.summary || "Sin descripci\xF3n.",
           tags: tagSections,
-          status: "Ongoing"
+          status: raw.metadata?.status === "ONGOING" ? "Ongoing" : "Completed"
         })
       });
     }
@@ -853,7 +883,7 @@ var _Sources = (() => {
     // ─── getSearchResults ─────────────────────────────────────────────────────
     async getSearchResults(query, _metadata) {
       try {
-        const { host } = await this.creds();
+        const { host, token } = await this.creds();
         const raw = await this.apiFetch(`${host}/api/v1/mangas`);
         const term = (query.title ?? "").toLowerCase().trim();
         const filtered = term ? raw.filter((m) => (m.title ?? "").toLowerCase().includes(term)) : raw;
@@ -862,7 +892,7 @@ var _Sources = (() => {
             (m) => App.createPartialSourceManga({
               mangaId: String(m.id),
               title: m.title ?? "Sin t\xEDtulo",
-              image: m.coverUrl ?? "",
+              image: getCoverUrl(m.metadata, host, token),
               subtitle: m.readingStatus ? `${m.readingStatus.readChapters}/${m.readingStatus.totalChapters} cap.` : void 0
             })
           )
@@ -874,20 +904,21 @@ var _Sources = (() => {
     // ─── getHomePageSections ──────────────────────────────────────────────────
     async getHomePageSections(sectionCallback) {
       try {
-        const { host } = await this.creds();
+        const { host, token } = await this.creds();
         const raw = await this.apiFetch(`${host}/api/v1/mangas`);
         const recentSection = App.createHomeSection({
           id: "recent",
           title: "Recientemente A\xF1adidos",
           containsMoreItems: true,
-          type: import_types.HomeSectionType.singleRowNormal
+          type: import_types.HomeSectionType.singleRowNormal,
+          items: []
         });
         sectionCallback(recentSection);
         recentSection.items = [...raw].sort((a, b) => b.id - a.id).slice(0, 20).map(
           (m) => App.createPartialSourceManga({
             mangaId: String(m.id),
             title: m.title ?? "Sin t\xEDtulo",
-            image: m.coverUrl ?? ""
+            image: getCoverUrl(m.metadata, host, token)
           })
         );
         sectionCallback(recentSection);
@@ -895,14 +926,15 @@ var _Sources = (() => {
           id: "unread",
           title: "Cap\xEDtulos Sin Leer",
           containsMoreItems: true,
-          type: import_types.HomeSectionType.singleRowNormal
+          type: import_types.HomeSectionType.singleRowNormal,
+          items: []
         });
         sectionCallback(unreadSection);
         unreadSection.items = raw.filter((m) => m.readingStatus && m.readingStatus.unreadChapters > 0).slice(0, 20).map(
           (m) => App.createPartialSourceManga({
             mangaId: String(m.id),
             title: m.title ?? "Sin t\xEDtulo",
-            image: m.coverUrl ?? "",
+            image: getCoverUrl(m.metadata, host, token),
             subtitle: `${m.readingStatus.unreadChapters} sin leer`
           })
         );
@@ -912,14 +944,15 @@ var _Sources = (() => {
           id: "setup",
           title: "Configuraci\xF3n Requerida",
           containsMoreItems: false,
-          type: import_types.HomeSectionType.singleRowNormal
+          type: import_types.HomeSectionType.singleRowNormal,
+          items: []
         });
         sectionCallback(setupSection);
         setupSection.items = [
           App.createPartialSourceManga({
             mangaId: "setup_help",
             title: "Toca aqu\xED para ver c\xF3mo configurar la extensi\xF3n",
-            image: ""
+            image: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"/>'
           })
         ];
         sectionCallback(setupSection);
@@ -927,7 +960,7 @@ var _Sources = (() => {
     }
     async getViewMoreItems(homepageSectionId, _metadata) {
       try {
-        const { host } = await this.creds();
+        const { host, token } = await this.creds();
         const raw = await this.apiFetch(`${host}/api/v1/mangas`);
         let results = raw;
         if (homepageSectionId === "recent") {
@@ -942,7 +975,7 @@ var _Sources = (() => {
             (m) => App.createPartialSourceManga({
               mangaId: String(m.id),
               title: m.title ?? "Sin t\xEDtulo",
-              image: m.coverUrl ?? ""
+              image: getCoverUrl(m.metadata, host, token)
             })
           )
         });
