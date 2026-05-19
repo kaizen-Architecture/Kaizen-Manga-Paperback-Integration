@@ -37,7 +37,7 @@ declare const App: any
 // This object is evaluated in Node by the toolchain to generate versioning.json.
 // It must be plain data — no runtime globals.
 export const KaizenMangaInfo: SourceInfo = {
-  version: '1.0.8',
+  version: '1.1.0',
   name: 'Kaizen Manga',
   icon: 'icon.png',
   author: 'D4nj3s (DanielJNavas)',
@@ -89,10 +89,16 @@ class KaizenInterceptor implements SourceInterceptor {
   async interceptRequest(request: PBRequest): Promise<PBRequest> {
     const token = ((await this.stateManager.retrieve('token')) as string) ?? ''
     if (token) {
-      if (!request.headers) {
-        request.headers = {}
-      }
-      request.headers['Authorization'] = `Bearer ${token.trim()}`
+      const headers = { ...(request.headers ?? {}) }
+      headers['Authorization'] = `Bearer ${token.trim()}`
+      return App.createRequest({
+        url: request.url,
+        method: request.method,
+        headers,
+        data: request.data,
+        param: request.param,
+        cookies: request.cookies,
+      })
     }
     return request
   }
@@ -195,7 +201,7 @@ export class KaizenManga extends Source implements MangaProgressProviding {
         mangaId,
         chapNum: ch.index ?? 0,
         name: ch.name ?? `Capítulo ${ch.index}`,
-        langCode: '🇪🇸',
+        langCode: '🇬🇧',
         time: ch.createdAt ? new Date(ch.createdAt) : undefined,
       })
     )
@@ -204,16 +210,17 @@ export class KaizenManga extends Source implements MangaProgressProviding {
   // ─── getChapterDetails ────────────────────────────────────────────────────
   async getChapterDetails(mangaId: string, chapterId: string): Promise<ChapterDetails> {
     if (mangaId === 'setup_help') {
-      return App.createChapterDetails({ id: chapterId, mangaId, pages: [], longStrip: false })
+      return App.createChapterDetails({ id: chapterId, mangaId, pages: [] })
     }
     const { host, token } = await this.creds()
     const raw = await this.apiFetch(
       `${host}/api/v1/mangas/${mangaId}/chapters/${chapterId}/pages`
     )
-    const pages: string[] = (raw.pages ?? []).map(
-      (p: any) => `${host}${p.url}?token=${encodeURIComponent(token)}`
-    )
-    return App.createChapterDetails({ id: chapterId, mangaId, pages, longStrip: false })
+    const pages: string[] = (raw.pages ?? []).map((p: any) => {
+      const separator = p.url.includes('?') ? '&' : '?'
+      return `${host}${p.url}${separator}token=${encodeURIComponent(token)}`
+    })
+    return App.createChapterDetails({ id: chapterId, mangaId, pages })
   }
 
   // ─── getSearchResults ─────────────────────────────────────────────────────
@@ -416,11 +423,7 @@ export class KaizenManga extends Source implements MangaProgressProviding {
                             'Content-Type': 'application/json',
                           }
                         })
-                        const testManager = App.createRequestManager({
-                          requestsPerSecond: 1,
-                          requestTimeout: 5000
-                        })
-                        const resp = await testManager.schedule(testRequest, 1)
+                        const resp = await this.requestManager.schedule(testRequest, 1)
                         if (resp.status >= 400) {
                           await this.stateManager.store('status', `Error HTTP: ${resp.status}`)
                           return
