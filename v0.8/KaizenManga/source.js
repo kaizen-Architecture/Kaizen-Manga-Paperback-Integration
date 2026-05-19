@@ -729,7 +729,7 @@ var _Sources = (() => {
   });
   var import_types = __toESM(require_lib());
   var KaizenMangaInfo = {
-    version: "1.1.0",
+    version: "1.2.0",
     name: "Kaizen Manga",
     icon: "icon.png",
     author: "D4nj3s (DanielJNavas)",
@@ -767,20 +767,23 @@ var _Sources = (() => {
       this.stateManager = stateManager;
     }
     async interceptRequest(request) {
-      const token = await this.stateManager.retrieve("token") ?? "";
-      if (token) {
-        const headers = { ...request.headers ?? {} };
-        headers["Authorization"] = `Bearer ${token.trim()}`;
-        return App.createRequest({
-          url: request.url,
-          method: request.method,
-          headers,
-          data: request.data,
-          param: request.param,
-          cookies: request.cookies
-        });
+      let url = request.url;
+      if (url.startsWith("FAKE*")) {
+        url = url.split("*REAL*").pop() ?? "";
       }
-      return request;
+      const token = await this.stateManager.retrieve("token") ?? "";
+      const headers = { ...request.headers ?? {} };
+      if (token) {
+        headers["Authorization"] = `Bearer ${token.trim()}`;
+      }
+      return App.createRequest({
+        url,
+        method: request.method,
+        headers,
+        data: request.data,
+        param: request.param,
+        cookies: request.cookies
+      });
     }
     async interceptResponse(response) {
       return response;
@@ -877,13 +880,12 @@ var _Sources = (() => {
       if (mangaId === "setup_help") {
         return App.createChapterDetails({ id: chapterId, mangaId, pages: [] });
       }
-      const { host, token } = await this.creds();
+      const { host } = await this.creds();
       const raw = await this.apiFetch(
         `${host}/api/v1/mangas/${mangaId}/chapters/${chapterId}/pages`
       );
       const pages = (raw.pages ?? []).map((p) => {
-        const separator = p.url.includes("?") ? "&" : "?";
-        return `${host}${p.url}${separator}token=${encodeURIComponent(token)}`;
+        return `FAKE*/page_${p.index}.png?*REAL*${host}${p.url}`;
       });
       return App.createChapterDetails({ id: chapterId, mangaId, pages });
     }
@@ -997,89 +999,67 @@ var _Sources = (() => {
         header: "Configuraci\xF3n de Kaizen Downloader",
         isHidden: false,
         rows: async () => [
-          App.createDUINavigationButton({
-            id: "server_settings",
-            label: "Configuraci\xF3n del Servidor",
-            form: App.createDUIForm({
-              sections: async () => [
-                App.createDUISection({
-                  id: "connection",
-                  header: "Detalles del Servidor Kaizen",
-                  isHidden: false,
-                  rows: async () => [
-                    App.createDUIInputField({
-                      id: "host",
-                      label: "Host del Servidor",
-                      value: App.createDUIBinding({
-                        get: async () => await this.stateManager.retrieve("host") ?? "",
-                        set: async (v) => this.stateManager.store("host", v)
-                      })
-                    }),
-                    App.createDUISecureInputField({
-                      id: "token",
-                      label: "API Token",
-                      value: App.createDUIBinding({
-                        get: async () => await this.stateManager.retrieve("token") ?? "",
-                        set: async (v) => this.stateManager.store("token", v)
-                      })
-                    })
-                  ]
-                }),
-                App.createDUISection({
-                  id: "testing",
-                  header: "Prueba de Conexi\xF3n",
-                  isHidden: false,
-                  rows: async () => [
-                    App.createDUIInputField({
-                      id: "status",
-                      label: "Resultado",
-                      value: App.createDUIBinding({
-                        get: async () => await this.stateManager.retrieve("status") ?? "Sin verificar",
-                        set: async (v) => {
-                        }
-                      })
-                    }),
-                    App.createDUIButton({
-                      id: "test_connection",
-                      label: "Probar Conexi\xF3n",
-                      onTap: async () => {
-                        const host = await this.stateManager.retrieve("host") ?? "";
-                        const token = await this.stateManager.retrieve("token") ?? "";
-                        const cleaned = cleanHost(host);
-                        if (!cleaned) {
-                          await this.stateManager.store("status", "Error: Host vac\xEDo");
-                          return;
-                        }
-                        await this.stateManager.store("status", "Probando conexi\xF3n...");
-                        try {
-                          const testRequest = App.createRequest({
-                            url: `${cleaned}/api/v1/mangas`,
-                            method: "GET",
-                            headers: {
-                              Authorization: `Bearer ${token}`,
-                              "Content-Type": "application/json"
-                            }
-                          });
-                          const resp = await this.requestManager.schedule(testRequest, 1);
-                          if (resp.status >= 400) {
-                            await this.stateManager.store("status", `Error HTTP: ${resp.status}`);
-                            return;
-                          }
-                          const data = JSON.parse(resp.data ?? "[]");
-                          if (!Array.isArray(data)) {
-                            await this.stateManager.store("status", "Error: JSON inv\xE1lido");
-                            return;
-                          }
-                          await this.stateManager.store("status", `\xA1\xC9xito! (${data.length} mangas)`);
-                        } catch (err) {
-                          await this.stateManager.store("status", `Error: ${err.message || String(err)}`);
-                        }
-                      }
-                    })
-                  ]
-                })
-              ]
+          App.createDUIInputField({
+            id: "host",
+            label: "Host del Servidor",
+            value: App.createDUIBinding({
+              get: async () => await this.stateManager.retrieve("host") ?? "",
+              set: async (v) => this.stateManager.store("host", v)
             })
+          }),
+          App.createDUISecureInputField({
+            id: "token",
+            label: "API Token",
+            value: App.createDUIBinding({
+              get: async () => await this.stateManager.retrieve("token") ?? "",
+              set: async (v) => this.stateManager.store("token", v)
+            })
+          }),
+          App.createDUIInputField({
+            id: "status",
+            label: "Resultado",
+            value: App.createDUIBinding({
+              get: async () => await this.stateManager.retrieve("status") ?? "Sin verificar",
+              set: async (v) => {
+              }
+            })
+          }),
+          App.createDUIButton({
+            id: "test_connection",
+            label: "Probar Conexi\xF3n",
+            onTap: async () => {
+              const host = await this.stateManager.retrieve("host") ?? "";
+              const token = await this.stateManager.retrieve("token") ?? "";
+              const cleaned = cleanHost(host);
+              if (!cleaned) {
+                await this.stateManager.store("status", "Error: Host vac\xEDo");
+                return;
+              }
+              await this.stateManager.store("status", "Probando conexi\xF3n...");
+              try {
+                const testRequest = App.createRequest({
+                  url: `${cleaned}/api/v1/mangas`,
+                  method: "GET",
+                  headers: {
+                    Authorization: `Bearer ${token}`,
+                    "Content-Type": "application/json"
+                  }
+                });
+                const resp = await this.requestManager.schedule(testRequest, 1);
+                if (resp.status >= 400) {
+                  await this.stateManager.store("status", `Error HTTP: ${resp.status}`);
+                  return;
+                }
+                const data = JSON.parse(resp.data ?? "[]");
+                if (!Array.isArray(data)) {
+                  await this.stateManager.store("status", "Error: JSON inv\xE1lido");
+                  return;
+                }
+                await this.stateManager.store("status", `\xA1\xC9xito! (${data.length} mangas)`);
+              } catch (err) {
+                await this.stateManager.store("status", `Error: ${err.message || String(err)}`);
+              }
+            }
           })
         ]
       });
