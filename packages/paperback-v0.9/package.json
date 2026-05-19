@@ -5,8 +5,8 @@
   "description": "Accede a tu biblioteca local de Kaizen Manga Downloader directamente desde Paperback iOS v0.9.",
   "main": "dist/bundle.js",
   "scripts": {
-    "build": "npx --package=@paperback/toolchain paperback bundle",
-    "serve": "npx --package=@paperback/toolchain paperback serve"
+    "build": "npx --package=@paperback/toolchain paperback-cli bundle",
+    "serve": "npx --package=@paperback/toolchain paperback-cli serve"
   },
   "dependencies": {
     "@kaizen-manga-paperback/core": "file:../core",
