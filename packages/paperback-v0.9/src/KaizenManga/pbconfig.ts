@@ -5,8 +5,8 @@ export default {
   description: "Conector WIP para Paperback v0.9. Usa el paquete v0.8 para tu instalación actual.",
   version: "1.0.0",
   icon: "icon.png",
-  author: "Kaizen Architecture",
-  authorWebsite: "https://github.com/kaizen-Architecture",
+  author: "D4j3s",
+  authorWebsite: "https://github.com/D4j3s",
   contentRating: ContentRating.EVERYONE,
   websiteBaseURL: "http://localhost:3333",
 }
