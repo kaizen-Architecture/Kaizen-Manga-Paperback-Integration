@@ -729,7 +729,7 @@ var _Sources = (() => {
   });
   var import_types = __toESM(require_lib());
   var KaizenMangaInfo = {
-    version: "1.0.2",
+    version: "1.0.3",
     name: "Kaizen Manga",
     icon: "icon.png",
     author: "D4nj3s (DanielJNavas)",
@@ -758,12 +758,7 @@ var _Sources = (() => {
         requestsPerSecond: 5,
         requestTimeout: 2e4
       });
-    }
-    get stateManager() {
-      if (!this._stateManager) {
-        this._stateManager = App.createSourceStateManager();
-      }
-      return this._stateManager;
+      this.stateManager = App.createSourceStateManager();
     }
     async creds() {
       const host = await this.stateManager.retrieve("host") ?? "";
