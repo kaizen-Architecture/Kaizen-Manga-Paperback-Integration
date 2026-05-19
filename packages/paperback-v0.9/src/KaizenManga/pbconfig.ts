@@ -5,8 +5,8 @@ export default {
   description: "Conector WIP para Paperback v0.9. Usa el paquete v0.8 para tu instalación actual.",
   version: "1.0.0",
   icon: "icon.png",
-  author: "D4j3s",
-  authorWebsite: "https://github.com/D4j3s",
+  author: "D4nj3s (DanielJNavas)",
+  authorWebsite: "https://github.com/d4nj3s",
   contentRating: ContentRating.EVERYONE,
   websiteBaseURL: "http://localhost:3333",
 }

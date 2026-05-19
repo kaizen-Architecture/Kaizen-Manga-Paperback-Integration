@@ -27,8 +27,8 @@ export const KaizenMangaInfo: SourceInfo = {
   version: '1.0.0',
   name: 'Kaizen Manga',
   icon: 'icon.png',
-  author: 'D4j3s',
-  authorWebsite: 'https://github.com/D4j3s',
+  author: 'D4nj3s (DanielJNavas)',
+  authorWebsite: 'https://github.com/d4nj3s',
   description:
     'Accede a tu biblioteca local de Kaizen Manga Downloader directamente desde Paperback.',
   contentRating: ContentRating.EVERYONE,
