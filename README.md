@@ -1,89 +1,91 @@
-# 📚 Kaizen Manga - Integración con Paperback
+# 📚 Kaizen Manga - Paperback Integration
 
-Este repositorio contiene los conectores de origen (**Source**) y seguimiento (**Tracker**) oficiales para la aplicación de lectura de manga **Paperback** en iOS (tanto para la versión actual **v0.8** como para la futura **v0.9**). 
+[![Language: Spanish](https://img.shields.io/badge/Language-Español-yellow.svg)](README.es.md)
 
-Permite explorar toda tu biblioteca local de **Kaizen Manga Downloader**, leer tus capítulos en streaming directo (incluso archivos CBZ locales) y sincronizar el estado de lectura bidireccionalmente.
+This repository contains the official **Source** and **Tracker** connectors for the **Paperback** manga reader application on iOS (supporting both the stable **v0.8** version and the future **v0.9** specification).
+
+It allows you to browse your local **Kaizen Manga Downloader** library, stream chapters directly (including local CBZ extractions), and synchronize reading progress bi-directionally.
 
 ---
 
-## ⚡ Métodos de Instalación
+## ⚡ Installation Methods
 
-Puedes añadir este repositorio a Paperback en tu dispositivo iOS de dos formas:
+You can add this repository to Paperback on your iOS device in two ways:
 
-### 🚀 Método 1: Instalación en Un Clic (Recomendado)
-Accede a la página de inicio del proyecto desde el navegador **Safari** de tu iPhone/iPad:
+### 🚀 Method 1: One-Click Installation (Recommended)
+Access the project landing page directly from **Safari** on your iPhone/iPad:
 
-👉 **[Página de Instalación de Kaizen Manga](https://kaizen-architecture.github.io/Kaizen-Manga-Paperback-Integration/)**
+👉 **[Kaizen Manga Installation Page](https://kaizen-architecture.github.io/Kaizen-Manga-Paperback-Integration/)**
 
-Allí verás el botón **Añadir a Paperback**. Al pulsarlo, la app se abrirá e importará el repositorio de forma completamente automática.
+There, you will find the **Add to Paperback** button. Tapping it will open the app and import the repository automatically.
 
-### 📋 Método 2: Instalación Manual
-Si prefieres añadir la dirección de forma manual dentro de la aplicación:
+### 📋 Method 2: Manual Installation
+If you prefer to add the repository URL manually inside the app:
 
-1. Abre **Paperback** en tu dispositivo.
-2. Ve a **Settings** ➡️ **External Sources** ➡️ **Add Repository**.
-3. Pega la URL correspondiente a tu versión de Paperback:
-   * **Para Paperback v0.8.x (iOS estable):** 
+1. Open **Paperback** on your device.
+2. Navigate to **Settings** ➡️ **External Sources** ➡️ **Add Repository**.
+3. Paste the URL corresponding to your Paperback version:
+   * **For Paperback v0.8.x (iOS Stable):** 
      ```
      https://kaizen-architecture.github.io/Kaizen-Manga-Paperback-Integration/v0.8
      ```
-   * **Para Paperback v0.9.x (WIP / Alpha):** 
+   * **For Paperback v0.9.x (WIP / Alpha):** 
      ```
      https://kaizen-architecture.github.io/Kaizen-Manga-Paperback-Integration/v0.9
      ```
-4. Guarda y pulsa en instalar la extensión **Kaizen Manga** que aparecerá en la lista.
+4. Save and tap install next to the **Kaizen Manga** extension that appears in the list.
 
 ---
 
-## ⚙️ Configuración de la Extensión
+## ⚙️ Extension Configuration
 
-Una vez instalada en Paperback, debes enlazarla con tu servidor local o instancia de staging de Kaizen Manga Downloader:
+Once installed in Paperback, you must link it to your Kaizen Manga Downloader server instance:
 
-1. Ve a **Settings** ➡️ **Active Sources** ➡️ **Kaizen Manga**.
-2. Rellena los campos del formulario de configuración:
-   * **Host del Servidor:** La URL base de tu servidor de Kaizen (ej. `http://192.168.1.50:3333` o `http://tu-servidor-kaizen:3333`).
-   * **API Token:** Tu token de autenticación que generas desde el panel de administración de tu instancia de Kaizen Downloader.
-3. Guarda los cambios. ¡Tu biblioteca se sincronizará al instante!
-
----
-
-## ✨ Características Soportadas
-
-* 🔍 **Búsqueda Avanzada:** Filtra y busca mangas en tu servidor Kaizen directamente desde el motor de búsqueda global de Paperback.
-* 🏠 **Inicio Dinámico (Home Sections):**
-  * **Recientemente Añadidos:** Mangas descargados recientemente en tu servidor.
-  * **Capítulos Sin Leer:** Acceso rápido a las series en las que tienes capítulos pendientes de lectura.
-* 📖 **Extractor de CBZ Optimizado:** Lee capítulos comprimidos locales mediante transmisión optimizada JSON.
-* 🔄 **Sincronización Bidireccional:** Al terminar de leer un capítulo en Paperback, se enviará una señal en caliente (`PATCH`) al servidor de Kaizen para marcar el capítulo como leído automáticamente en tu base de datos global.
+1. Go to **Settings** ➡️ **Active Sources** ➡️ **Kaizen Manga**.
+2. Fill out the configuration fields:
+   * **Server Host:** The base URL of your Kaizen server (e.g. `http://192.168.1.50:3333` or `http://your-kaizen-server:3333`).
+   * **API Token:** Your API access token generated from your Kaizen Downloader admin panel.
+3. Save the changes. Your library will synchronize instantly!
 
 ---
 
-## 🛠️ Desarrollo Local y Compilación
+## ✨ Features
 
-Si deseas realizar modificaciones o contribuir al desarrollo de la extensión de forma local:
+* 🔍 **Global Search:** Browse and search manga on your Kaizen server directly through Paperback's search interface.
+* 🏠 **Dynamic Home Sections:**
+  * **Recently Added:** Quickly access the latest downloads on your server.
+  * **Unread Chapters:** Access series that have unread chapters pending.
+* 📖 **Optimized CBZ Extractor:** Streams compressed image files seamlessly using JSON page structures.
+* 🔄 **Bi-directional Reading Sync:** Automatically sends a background status update (`PATCH` request) to mark chapters as read in Kaizen Downloader when finished reading on Paperback.
 
-### 1. Clonar el Repositorio e Instalar Dependencias
+---
+
+## 🛠️ Local Development & Building
+
+If you wish to make changes or contribute to the extension development locally:
+
+### 1. Clone Repository & Install Dependencies
 ```bash
 git clone https://github.com/kaizen-Architecture/Kaizen-Manga-Paperback-Integration.git
 cd Kaizen-Manga-Paperback-Integration
 ```
 
-### 2. Compilar la Extensión
-Puedes compilar la librería core compartida y el conector específico:
+### 2. Compile Extensions
+You can compile the shared core library and the specific targets:
 ```bash
-# Compilar core compartido
+# Compile shared core library
 npm run build:core
 
-# Compilar para v0.8 (iOS v0.8.11-r1 / SDK v5)
+# Build v0.8 Extension (iOS v0.8.11-r1 / SDK v5)
 npm run build:v0.8
 
-# Compilar para v0.9 (SDK v6)
+# Build v0.9 Extension (SDK v6)
 npm run build:v0.9
 ```
 
-### 3. Servir en Red Local para Pruebas en el iPad
-Para depurar la extensión en vivo usando la app de Paperback sin desplegar a GitHub:
+### 3. Serve Locally for On-Device Debugging
+To debug the extension on your iPad/iPhone without deploying to GitHub Pages:
 ```bash
 npm run serve:v0.8
 ```
-Esto abrirá un servidor local en el puerto `1024`. Copia la dirección IP mostrada (ej. `http://192.168.1.15:1024`) y añádela como repositorio externo en la app de Paperback de tu iPad.
+This starts the development server on port `1024`. Copy the local IP address (e.g., `http://192.168.1.15:1024`) and paste it as an external repository in the Paperback application on your iPad.
