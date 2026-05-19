@@ -729,7 +729,7 @@ var _Sources = (() => {
   });
   var import_types = __toESM(require_lib());
   var KaizenMangaInfo = {
-    version: "1.2.1",
+    version: "1.3.0",
     name: "Kaizen Manga",
     icon: "icon.png",
     author: "D4nj3s (DanielJNavas)",
@@ -927,6 +927,23 @@ var _Sources = (() => {
       try {
         const { host, token } = await this.creds();
         const raw = await this.apiFetch(`${host}/api/v1/mangas`);
+        const onDeckSection = App.createHomeSection({
+          id: "on_deck",
+          title: "En Curso (On Deck)",
+          containsMoreItems: true,
+          type: import_types.HomeSectionType.singleRowNormal,
+          items: []
+        });
+        sectionCallback(onDeckSection);
+        onDeckSection.items = raw.filter((m) => m.readingStatus && m.readingStatus.readChapters > 0 && !m.readingStatus.isFullyRead).slice(0, 20).map(
+          (m) => App.createPartialSourceManga({
+            mangaId: String(m.id),
+            title: m.title ?? "Sin t\xEDtulo",
+            image: getCoverUrl(m.metadata, host, token),
+            subtitle: `${m.readingStatus.readChapters}/${m.readingStatus.totalChapters} le\xEDdos`
+          })
+        );
+        sectionCallback(onDeckSection);
         const recentSection = App.createHomeSection({
           id: "recent",
           title: "Recientemente A\xF1adidos",
@@ -960,6 +977,33 @@ var _Sources = (() => {
           })
         );
         sectionCallback(unreadSection);
+        const libraryMap = /* @__PURE__ */ new Map();
+        for (const m of raw) {
+          const libName = m.library?.name?.trim() || m.library?.path?.split(/[/\\]/).pop() || "Biblioteca";
+          if (!libraryMap.has(libName)) {
+            libraryMap.set(libName, []);
+          }
+          libraryMap.get(libName).push(m);
+        }
+        for (const [libName, libMangas] of libraryMap.entries()) {
+          const libId = `lib_${libName.toLowerCase().replace(/[^a-z0-9]+/g, "_")}`;
+          const libSection = App.createHomeSection({
+            id: libId,
+            title: libName,
+            containsMoreItems: true,
+            type: import_types.HomeSectionType.singleRowNormal,
+            items: []
+          });
+          sectionCallback(libSection);
+          libSection.items = libMangas.slice(0, 20).map(
+            (m) => App.createPartialSourceManga({
+              mangaId: String(m.id),
+              title: m.title ?? "Sin t\xEDtulo",
+              image: getCoverUrl(m.metadata, host, token)
+            })
+          );
+          sectionCallback(libSection);
+        }
       } catch (err) {
         const setupSection = App.createHomeSection({
           id: "setup",
@@ -990,6 +1034,16 @@ var _Sources = (() => {
           results = raw.filter(
             (m) => m.readingStatus && m.readingStatus.unreadChapters > 0
           );
+        } else if (homepageSectionId === "on_deck") {
+          results = raw.filter(
+            (m) => m.readingStatus && m.readingStatus.readChapters > 0 && !m.readingStatus.isFullyRead
+          );
+        } else if (homepageSectionId.startsWith("lib_")) {
+          results = raw.filter((m) => {
+            const libName = m.library?.name?.trim() || m.library?.path?.split(/[/\\]/).pop() || "Biblioteca";
+            const libId = `lib_${libName.toLowerCase().replace(/[^a-z0-9]+/g, "_")}`;
+            return libId === homepageSectionId;
+          });
         }
         return App.createPagedResults({
           results: results.map(
