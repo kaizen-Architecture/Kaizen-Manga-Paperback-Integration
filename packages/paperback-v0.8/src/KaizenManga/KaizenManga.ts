@@ -37,7 +37,7 @@ declare const App: any
 // This object is evaluated in Node by the toolchain to generate versioning.json.
 // It must be plain data — no runtime globals.
 export const KaizenMangaInfo: SourceInfo = {
-  version: '1.2.1',
+  version: '1.3.0',
   name: 'Kaizen Manga',
   icon: 'icon.png',
   author: 'D4nj3s (DanielJNavas)',
@@ -273,6 +273,28 @@ export class KaizenManga extends Source implements MangaProgressProviding {
       const { host, token } = await this.creds()
       const raw: any[] = await this.apiFetch(`${host}/api/v1/mangas`)
 
+      // On Deck (mangas started but not fully read)
+      const onDeckSection: HomeSection = App.createHomeSection({
+        id: 'on_deck',
+        title: 'En Curso (On Deck)',
+        containsMoreItems: true,
+        type: HomeSectionType.singleRowNormal,
+        items: [],
+      })
+      sectionCallback(onDeckSection)
+      onDeckSection.items = raw
+        .filter((m) => m.readingStatus && m.readingStatus.readChapters > 0 && !m.readingStatus.isFullyRead)
+        .slice(0, 20)
+        .map((m) =>
+          App.createPartialSourceManga({
+            mangaId: String(m.id),
+            title: m.title ?? 'Sin título',
+            image: getCoverUrl(m.metadata, host, token),
+            subtitle: `${m.readingStatus.readChapters}/${m.readingStatus.totalChapters} leídos`,
+          })
+        )
+      sectionCallback(onDeckSection)
+
       // Recently added
       const recentSection: HomeSection = App.createHomeSection({
         id: 'recent',
@@ -315,6 +337,36 @@ export class KaizenManga extends Source implements MangaProgressProviding {
           })
         )
       sectionCallback(unreadSection)
+
+      // Group by library dynamically
+      const libraryMap = new Map<string, any[]>()
+      for (const m of raw) {
+        const libName = m.library?.name?.trim() || m.library?.path?.split(/[/\\]/).pop() || 'Biblioteca'
+        if (!libraryMap.has(libName)) {
+          libraryMap.set(libName, [])
+        }
+        libraryMap.get(libName)!.push(m)
+      }
+
+      for (const [libName, libMangas] of libraryMap.entries()) {
+        const libId = `lib_${libName.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`
+        const libSection: HomeSection = App.createHomeSection({
+          id: libId,
+          title: libName,
+          containsMoreItems: true,
+          type: HomeSectionType.singleRowNormal,
+          items: [],
+        })
+        sectionCallback(libSection)
+        libSection.items = libMangas.slice(0, 20).map((m) =>
+          App.createPartialSourceManga({
+            mangaId: String(m.id),
+            title: m.title ?? 'Sin título',
+            image: getCoverUrl(m.metadata, host, token),
+          })
+        )
+        sectionCallback(libSection)
+      }
     } catch (err) {
       const setupSection: HomeSection = App.createHomeSection({
         id: 'setup',
@@ -349,6 +401,16 @@ export class KaizenManga extends Source implements MangaProgressProviding {
         results = raw.filter(
           (m) => m.readingStatus && m.readingStatus.unreadChapters > 0
         )
+      } else if (homepageSectionId === 'on_deck') {
+        results = raw.filter(
+          (m) => m.readingStatus && m.readingStatus.readChapters > 0 && !m.readingStatus.isFullyRead
+        )
+      } else if (homepageSectionId.startsWith('lib_')) {
+        results = raw.filter((m) => {
+          const libName = m.library?.name?.trim() || m.library?.path?.split(/[/\\]/).pop() || 'Biblioteca'
+          const libId = `lib_${libName.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`
+          return libId === homepageSectionId
+        })
       }
       return App.createPagedResults({
         results: results.map((m) =>
