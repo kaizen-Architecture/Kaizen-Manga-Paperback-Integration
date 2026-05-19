@@ -729,7 +729,7 @@ var _Sources = (() => {
   });
   var import_types = __toESM(require_lib());
   var KaizenMangaInfo = {
-    version: "1.0.8",
+    version: "1.1.0",
     name: "Kaizen Manga",
     icon: "icon.png",
     author: "D4nj3s (DanielJNavas)",
@@ -769,10 +769,16 @@ var _Sources = (() => {
     async interceptRequest(request) {
       const token = await this.stateManager.retrieve("token") ?? "";
       if (token) {
-        if (!request.headers) {
-          request.headers = {};
-        }
-        request.headers["Authorization"] = `Bearer ${token.trim()}`;
+        const headers = { ...request.headers ?? {} };
+        headers["Authorization"] = `Bearer ${token.trim()}`;
+        return App.createRequest({
+          url: request.url,
+          method: request.method,
+          headers,
+          data: request.data,
+          param: request.param,
+          cookies: request.cookies
+        });
       }
       return request;
     }
@@ -861,7 +867,7 @@ var _Sources = (() => {
           mangaId,
           chapNum: ch.index ?? 0,
           name: ch.name ?? `Cap\xEDtulo ${ch.index}`,
-          langCode: "\u{1F1EA}\u{1F1F8}",
+          langCode: "\u{1F1EC}\u{1F1E7}",
           time: ch.createdAt ? new Date(ch.createdAt) : void 0
         })
       );
@@ -869,16 +875,17 @@ var _Sources = (() => {
     // ─── getChapterDetails ────────────────────────────────────────────────────
     async getChapterDetails(mangaId, chapterId) {
       if (mangaId === "setup_help") {
-        return App.createChapterDetails({ id: chapterId, mangaId, pages: [], longStrip: false });
+        return App.createChapterDetails({ id: chapterId, mangaId, pages: [] });
       }
       const { host, token } = await this.creds();
       const raw = await this.apiFetch(
         `${host}/api/v1/mangas/${mangaId}/chapters/${chapterId}/pages`
       );
-      const pages = (raw.pages ?? []).map(
-        (p) => `${host}${p.url}?token=${encodeURIComponent(token)}`
-      );
-      return App.createChapterDetails({ id: chapterId, mangaId, pages, longStrip: false });
+      const pages = (raw.pages ?? []).map((p) => {
+        const separator = p.url.includes("?") ? "&" : "?";
+        return `${host}${p.url}${separator}token=${encodeURIComponent(token)}`;
+      });
+      return App.createChapterDetails({ id: chapterId, mangaId, pages });
     }
     // ─── getSearchResults ─────────────────────────────────────────────────────
     async getSearchResults(query, _metadata) {
@@ -1053,11 +1060,7 @@ var _Sources = (() => {
                               "Content-Type": "application/json"
                             }
                           });
-                          const testManager = App.createRequestManager({
-                            requestsPerSecond: 1,
-                            requestTimeout: 5e3
-                          });
-                          const resp = await testManager.schedule(testRequest, 1);
+                          const resp = await this.requestManager.schedule(testRequest, 1);
                           if (resp.status >= 400) {
                             await this.stateManager.store("status", `Error HTTP: ${resp.status}`);
                             return;
