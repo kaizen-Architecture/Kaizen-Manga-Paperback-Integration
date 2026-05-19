@@ -729,7 +729,7 @@ var _Sources = (() => {
   });
   var import_types = __toESM(require_lib());
   var KaizenMangaInfo = {
-    version: "1.0.3",
+    version: "1.0.4",
     name: "Kaizen Manga",
     icon: "icon.png",
     author: "D4nj3s (DanielJNavas)",
@@ -955,23 +955,84 @@ var _Sources = (() => {
       return App.createDUISection({
         id: "settings",
         header: "Configuraci\xF3n de Kaizen Downloader",
-        footer: "Introduce la URL de tu instancia de Kaizen y tu API Token para conectarte.",
         isHidden: false,
         rows: async () => [
-          App.createDUIInputField({
-            id: "host",
-            label: "Host del Servidor",
-            value: App.createDUIBinding({
-              get: async () => await this.stateManager.retrieve("host") ?? "",
-              set: async (v) => this.stateManager.store("host", v)
-            })
-          }),
-          App.createDUISecureInputField({
-            id: "token",
-            label: "API Token",
-            value: App.createDUIBinding({
-              get: async () => await this.stateManager.retrieve("token") ?? "",
-              set: async (v) => this.stateManager.store("token", v)
+          App.createDUINavigationButton({
+            id: "server_settings",
+            label: "Configuraci\xF3n del Servidor",
+            form: App.createDUIForm({
+              sections: async () => [
+                App.createDUISection({
+                  id: "connection",
+                  header: "Detalles del Servidor Kaizen",
+                  isHidden: false,
+                  rows: async () => [
+                    App.createDUIInputField({
+                      id: "host",
+                      label: "Host del Servidor",
+                      value: App.createDUIBinding({
+                        get: async () => await this.stateManager.retrieve("host") ?? "",
+                        set: async (v) => this.stateManager.store("host", v)
+                      })
+                    }),
+                    App.createDUISecureInputField({
+                      id: "token",
+                      label: "API Token",
+                      value: App.createDUIBinding({
+                        get: async () => await this.stateManager.retrieve("token") ?? "",
+                        set: async (v) => this.stateManager.store("token", v)
+                      })
+                    })
+                  ]
+                }),
+                App.createDUISection({
+                  id: "testing",
+                  header: "Prueba de Conexi\xF3n",
+                  isHidden: false,
+                  rows: async () => [
+                    App.createDUIButton({
+                      id: "test_connection",
+                      label: "Probar Conexi\xF3n",
+                      onTap: async () => {
+                        const host = await this.stateManager.retrieve("host") ?? "";
+                        const token = await this.stateManager.retrieve("token") ?? "";
+                        const cleaned = cleanHost(host);
+                        if (!cleaned) {
+                          throw new Error("Por favor, introduce el Host del Servidor primero.");
+                        }
+                        try {
+                          const testRequest = App.createRequest({
+                            url: `${cleaned}/api/v1/mangas`,
+                            method: "GET",
+                            headers: {
+                              Authorization: `Bearer ${token}`,
+                              "Content-Type": "application/json"
+                            }
+                          });
+                          const testManager = App.createRequestManager({
+                            requestsPerSecond: 1,
+                            requestTimeout: 5e3
+                          });
+                          const resp = await testManager.schedule(testRequest, 1);
+                          if (resp.status >= 400) {
+                            throw new Error(`C\xF3digo de estado HTTP: ${resp.status}`);
+                          }
+                          const data = JSON.parse(resp.data ?? "[]");
+                          if (!Array.isArray(data)) {
+                            throw new Error("La respuesta del servidor no tiene el formato esperado.");
+                          }
+                          throw new Error(`\xA1Conexi\xF3n exitosa! Encontrados ${data.length} mangas en tu biblioteca.`);
+                        } catch (err) {
+                          if (err.message.includes("\xA1Conexi\xF3n exitosa!")) {
+                            throw err;
+                          }
+                          throw new Error(`Fallo de conexi\xF3n: ${err.message || err}`);
+                        }
+                      }
+                    })
+                  ]
+                })
+              ]
             })
           })
         ]
