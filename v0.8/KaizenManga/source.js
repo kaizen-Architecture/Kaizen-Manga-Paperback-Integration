@@ -751,6 +751,19 @@ var _Sources = (() => {
     return h;
   }
   var KaizenManga = class extends import_types.Source {
+    constructor(cheerio) {
+      super(cheerio);
+      this.requestManager = App.createRequestManager({
+        requestsPerSecond: 5,
+        requestTimeout: 2e4
+      });
+    }
+    get stateManager() {
+      if (!this._stateManager) {
+        this._stateManager = App.createSourceStateManager();
+      }
+      return this._stateManager;
+    }
     async creds() {
       const host = await this.stateManager.retrieve("host") ?? "";
       const token = await this.stateManager.retrieve("token") ?? "";
