@@ -151,7 +151,18 @@ export class KaizenManga extends Source implements MangaProgressProviding {
       data: body,
     })
     const resp = await this.requestManager.schedule(req, 1)
-    if (resp.status >= 400) throw new Error(`HTTP ${resp.status} – ${url}`)
+    if (resp.status >= 400) {
+      let errorMessage = `HTTP ${resp.status} – ${url}`
+      try {
+        if (resp.data) {
+          const parsed = JSON.parse(resp.data)
+          if (parsed && typeof parsed.error === 'string') {
+            errorMessage = `${parsed.error} (HTTP ${resp.status})`
+          }
+        }
+      } catch (_) {}
+      throw new Error(errorMessage)
+    }
     return JSON.parse(resp.data ?? '{}')
   }
 
