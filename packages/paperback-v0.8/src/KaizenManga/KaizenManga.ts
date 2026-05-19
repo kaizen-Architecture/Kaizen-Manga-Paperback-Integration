@@ -37,7 +37,7 @@ declare const App: any
 // This object is evaluated in Node by the toolchain to generate versioning.json.
 // It must be plain data — no runtime globals.
 export const KaizenMangaInfo: SourceInfo = {
-  version: '1.4.0',
+  version: '1.4.1',
   name: 'Kaizen Manga',
   icon: 'icon.png',
   author: 'D4nj3s (DanielJNavas)',
@@ -117,6 +117,7 @@ class KaizenInterceptor implements SourceInterceptor {
 export class KaizenManga extends Source implements MangaProgressProviding {
   requestManager: RequestManager
   stateManager: SourceStateManager
+  private _mangasCache?: { data: any[]; timestamp: number }
 
   constructor(cheerio: CheerioAPI) {
     super(cheerio)
@@ -126,6 +127,16 @@ export class KaizenManga extends Source implements MangaProgressProviding {
       requestTimeout: 20000,
       interceptor: new KaizenInterceptor(this.stateManager),
     })
+  }
+
+  private async getCachedMangas(host: string): Promise<any[]> {
+    const now = Date.now()
+    if (this._mangasCache && (now - this._mangasCache.timestamp < 15000)) {
+      return this._mangasCache.data
+    }
+    const data: any[] = await this.apiFetch(`${host}/api/v1/mangas`)
+    this._mangasCache = { data, timestamp: now }
+    return data
   }
 
   private async creds(): Promise<{ host: string; token: string }> {
@@ -209,7 +220,7 @@ export class KaizenManga extends Source implements MangaProgressProviding {
       App.createTag({ id: g, label: g })
     )
     const tagSections: TagSection[] = tags.length
-      ? [App.createTagSection({ id: 'genres', label: 'Géneros', tags })]
+      ? [App.createTagSection({ id: 'genres', label: 'Genres', tags })]
       : []
 
     return App.createSourceManga({
@@ -264,7 +275,7 @@ export class KaizenManga extends Source implements MangaProgressProviding {
   async getSearchResults(query: SearchRequest, _metadata: any): Promise<PagedResults> {
     try {
       const { host, token } = await this.creds()
-      const raw: any[] = await this.apiFetch(`${host}/api/v1/mangas`)
+      const raw: any[] = await this.getCachedMangas(host)
       let results = raw
 
       // Filter by text term
@@ -302,7 +313,7 @@ export class KaizenManga extends Source implements MangaProgressProviding {
   async getSearchTags(): Promise<TagSection[]> {
     try {
       const { host } = await this.creds()
-      const raw: any[] = await this.apiFetch(`${host}/api/v1/mangas`)
+      const raw: any[] = await this.getCachedMangas(host)
       const genreSet = new Set<string>()
       for (const m of raw) {
         for (const g of m.metadata?.genres ?? []) {
@@ -315,7 +326,7 @@ export class KaizenManga extends Source implements MangaProgressProviding {
       return [
         App.createTagSection({
           id: 'genres',
-          label: 'Géneros',
+          label: 'Genres',
           tags,
         })
       ]
@@ -330,12 +341,12 @@ export class KaizenManga extends Source implements MangaProgressProviding {
   ): Promise<void> {
     try {
       const { host, token } = await this.creds()
-      const raw: any[] = await this.apiFetch(`${host}/api/v1/mangas`)
+      const raw: any[] = await this.getCachedMangas(host)
 
       // Genres (rows of genres as custom cards)
       const genresSection: HomeSection = App.createHomeSection({
         id: 'genres_section',
-        title: 'Géneros',
+        title: 'Genres',
         containsMoreItems: false,
         type: HomeSectionType.singleRowNormal,
         items: [],
@@ -424,7 +435,11 @@ export class KaizenManga extends Source implements MangaProgressProviding {
       // Group by library dynamically
       const libraryMap = new Map<string, any[]>()
       for (const m of raw) {
-        const libName = m.library?.name?.trim() || m.library?.path?.split(/[/\\]/).pop() || 'Biblioteca'
+        let libName = m.library?.name?.trim()
+        if (!libName) {
+          const folderName = m.library?.path?.split(/[/\\]/).pop()
+          libName = (folderName && folderName !== 'data') ? folderName : 'Library'
+        }
         if (!libraryMap.has(libName)) {
           libraryMap.set(libName, [])
         }
@@ -476,7 +491,7 @@ export class KaizenManga extends Source implements MangaProgressProviding {
   ): Promise<PagedResults> {
     try {
       const { host, token } = await this.creds()
-      const raw: any[] = await this.apiFetch(`${host}/api/v1/mangas`)
+      const raw: any[] = await this.getCachedMangas(host)
       let results = raw
       if (homepageSectionId === 'recent') {
         results = [...raw].sort((a, b) => b.id - a.id)
@@ -490,7 +505,11 @@ export class KaizenManga extends Source implements MangaProgressProviding {
         )
       } else if (homepageSectionId.startsWith('lib_')) {
         results = raw.filter((m) => {
-          const libName = m.library?.name?.trim() || m.library?.path?.split(/[/\\]/).pop() || 'Biblioteca'
+          let libName = m.library?.name?.trim()
+          if (!libName) {
+            const folderName = m.library?.path?.split(/[/\\]/).pop()
+            libName = (folderName && folderName !== 'data') ? folderName : 'Library'
+          }
           const libId = `lib_${libName.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`
           return libId === homepageSectionId
         })
