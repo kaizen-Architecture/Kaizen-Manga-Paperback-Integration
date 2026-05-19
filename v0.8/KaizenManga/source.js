@@ -729,7 +729,7 @@ var _Sources = (() => {
   });
   var import_types = __toESM(require_lib());
   var KaizenMangaInfo = {
-    version: "1.0.5",
+    version: "1.0.6",
     name: "Kaizen Manga",
     icon: "icon.png",
     author: "D4nj3s (DanielJNavas)",
@@ -990,6 +990,15 @@ var _Sources = (() => {
                   header: "Prueba de Conexi\xF3n",
                   isHidden: false,
                   rows: async () => [
+                    App.createDUIInputField({
+                      id: "status",
+                      label: "Resultado",
+                      value: App.createDUIBinding({
+                        get: async () => await this.stateManager.retrieve("status") ?? "Sin verificar",
+                        set: async (v) => {
+                        }
+                      })
+                    }),
                     App.createDUIButton({
                       id: "test_connection",
                       label: "Probar Conexi\xF3n",
@@ -998,8 +1007,10 @@ var _Sources = (() => {
                         const token = await this.stateManager.retrieve("token") ?? "";
                         const cleaned = cleanHost(host);
                         if (!cleaned) {
-                          throw new Error("Por favor, introduce el Host del Servidor primero.");
+                          await this.stateManager.store("status", "Error: Host vac\xEDo");
+                          return;
                         }
+                        await this.stateManager.store("status", "Probando conexi\xF3n...");
                         try {
                           const testRequest = App.createRequest({
                             url: `${cleaned}/api/v1/mangas`,
@@ -1015,18 +1026,17 @@ var _Sources = (() => {
                           });
                           const resp = await testManager.schedule(testRequest, 1);
                           if (resp.status >= 400) {
-                            throw new Error(`C\xF3digo de estado HTTP: ${resp.status}`);
+                            await this.stateManager.store("status", `Error HTTP: ${resp.status}`);
+                            return;
                           }
                           const data = JSON.parse(resp.data ?? "[]");
                           if (!Array.isArray(data)) {
-                            throw new Error("La respuesta del servidor no tiene el formato esperado.");
+                            await this.stateManager.store("status", "Error: JSON inv\xE1lido");
+                            return;
                           }
-                          throw new Error(`\xA1Conexi\xF3n exitosa! Encontrados ${data.length} mangas en tu biblioteca.`);
+                          await this.stateManager.store("status", `\xA1\xC9xito! (${data.length} mangas)`);
                         } catch (err) {
-                          if (err.message.includes("\xA1Conexi\xF3n exitosa!")) {
-                            throw err;
-                          }
-                          throw new Error(`Fallo de conexi\xF3n: ${err.message || err}`);
+                          await this.stateManager.store("status", `Error: ${err.message || String(err)}`);
                         }
                       }
                     })
