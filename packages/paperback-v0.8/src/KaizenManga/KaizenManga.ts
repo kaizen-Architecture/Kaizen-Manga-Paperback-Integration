@@ -27,7 +27,7 @@ declare const App: any
 // This object is evaluated in Node by the toolchain to generate versioning.json.
 // It must be plain data — no runtime globals.
 export const KaizenMangaInfo: SourceInfo = {
-  version: '1.0.1',
+  version: '1.0.2',
   name: 'Kaizen Manga',
   icon: 'icon.png',
   author: 'D4nj3s (DanielJNavas)',
@@ -51,6 +51,7 @@ export const KaizenMangaInfo: SourceInfo = {
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 function cleanHost(raw: string): string {
   let h = (raw ?? '').trim().replace(/\/+$/, '')
+  if (!h || h === 'http:/' || h === 'https:/' || h === 'http:' || h === 'https:') return ''
   if (!h.startsWith('http://') && !h.startsWith('https://')) h = 'http://' + h
   return h
 }
@@ -78,7 +79,11 @@ export class KaizenManga extends Source {
   private async creds(): Promise<{ host: string; token: string }> {
     const host  = ((await this.stateManager.retrieve('host')) as string) ?? ''
     const token = ((await this.stateManager.retrieve('token')) as string) ?? ''
-    return { host: cleanHost(host), token: token.trim() }
+    const cleaned = cleanHost(host)
+    if (!cleaned) {
+      throw new Error('Host no configurado')
+    }
+    return { host: cleaned, token: token.trim() }
   }
 
   private async apiFetch(url: string, method = 'GET', body?: string): Promise<any> {
@@ -100,6 +105,18 @@ export class KaizenManga extends Source {
 
   // ─── getMangaDetails ───────────────────────────────────────────────────────
   async getMangaDetails(mangaId: string): Promise<SourceManga> {
+    if (mangaId === 'setup_help') {
+      return App.createSourceManga({
+        id: 'setup_help',
+        mangaInfo: App.createMangaInfo({
+          titles: ['Cómo configurar Kaizen Manga'],
+          image: '',
+          author: 'D4nj3s (DanielJNavas)',
+          desc: 'Para usar esta extensión, ve a la pestaña "Ajustes" de Paperback -> "Extensiones" -> toca "Kaizen Manga" -> introduce la dirección IP/Host de tu servidor (ej. http://192.168.1.50:3333) y tu API Token de Kaizen.',
+          status: 'Completed',
+        }),
+      })
+    }
     const { host } = await this.creds()
     const raw = await this.apiFetch(`${host}/api/v1/mangas/${mangaId}`)
 
@@ -126,6 +143,9 @@ export class KaizenManga extends Source {
 
   // ─── getChapters ──────────────────────────────────────────────────────────
   async getChapters(mangaId: string): Promise<Chapter[]> {
+    if (mangaId === 'setup_help') {
+      return []
+    }
     const { host } = await this.creds()
     const raw = await this.apiFetch(`${host}/api/v1/mangas/${mangaId}`)
     return (raw.chapters ?? []).map((ch: any) =>
@@ -142,6 +162,9 @@ export class KaizenManga extends Source {
 
   // ─── getChapterDetails ────────────────────────────────────────────────────
   async getChapterDetails(mangaId: string, chapterId: string): Promise<ChapterDetails> {
+    if (mangaId === 'setup_help') {
+      return App.createChapterDetails({ id: chapterId, mangaId, pages: [], longStrip: false })
+    }
     const { host, token } = await this.creds()
     const raw = await this.apiFetch(
       `${host}/api/v1/mangas/${mangaId}/chapters/${chapterId}/pages`
@@ -154,99 +177,125 @@ export class KaizenManga extends Source {
 
   // ─── getSearchResults ─────────────────────────────────────────────────────
   async getSearchResults(query: SearchRequest, _metadata: any): Promise<PagedResults> {
-    const { host } = await this.creds()
-    const raw: any[] = await this.apiFetch(`${host}/api/v1/mangas`)
-    const term = (query.title ?? '').toLowerCase().trim()
-    const filtered = term
-      ? raw.filter((m) => (m.title ?? '').toLowerCase().includes(term))
-      : raw
+    try {
+      const { host } = await this.creds()
+      const raw: any[] = await this.apiFetch(`${host}/api/v1/mangas`)
+      const term = (query.title ?? '').toLowerCase().trim()
+      const filtered = term
+        ? raw.filter((m) => (m.title ?? '').toLowerCase().includes(term))
+        : raw
 
-    return App.createPagedResults({
-      results: filtered.map((m) =>
-        App.createPartialSourceManga({
-          mangaId: String(m.id),
-          title: m.title ?? 'Sin título',
-          image: m.coverUrl ?? '',
-          subtitle: m.readingStatus
-            ? `${m.readingStatus.readChapters}/${m.readingStatus.totalChapters} cap.`
-            : undefined,
-        })
-      ),
-    })
+      return App.createPagedResults({
+        results: filtered.map((m) =>
+          App.createPartialSourceManga({
+            mangaId: String(m.id),
+            title: m.title ?? 'Sin título',
+            image: m.coverUrl ?? '',
+            subtitle: m.readingStatus
+              ? `${m.readingStatus.readChapters}/${m.readingStatus.totalChapters} cap.`
+              : undefined,
+          })
+        ),
+      })
+    } catch (err) {
+      return App.createPagedResults({ results: [] })
+    }
   }
 
   // ─── getHomePageSections ──────────────────────────────────────────────────
   async getHomePageSections(
     sectionCallback: (section: HomeSection) => void
   ): Promise<void> {
-    const { host } = await this.creds()
-    const raw: any[] = await this.apiFetch(`${host}/api/v1/mangas`)
+    try {
+      const { host } = await this.creds()
+      const raw: any[] = await this.apiFetch(`${host}/api/v1/mangas`)
 
-    // Recently added
-    const recentSection: HomeSection = App.createHomeSection({
-      id: 'recent',
-      title: 'Recientemente Añadidos',
-      containsMoreItems: true,
-      type: HomeSectionType.singleRowNormal,
-    })
-    sectionCallback(recentSection)
-    recentSection.items = [...raw]
-      .sort((a, b) => b.id - a.id)
-      .slice(0, 20)
-      .map((m) =>
-        App.createPartialSourceManga({
-          mangaId: String(m.id),
-          title: m.title ?? 'Sin título',
-          image: m.coverUrl ?? '',
-        })
-      )
-    sectionCallback(recentSection)
+      // Recently added
+      const recentSection: HomeSection = App.createHomeSection({
+        id: 'recent',
+        title: 'Recientemente Añadidos',
+        containsMoreItems: true,
+        type: HomeSectionType.singleRowNormal,
+      })
+      sectionCallback(recentSection)
+      recentSection.items = [...raw]
+        .sort((a, b) => b.id - a.id)
+        .slice(0, 20)
+        .map((m) =>
+          App.createPartialSourceManga({
+            mangaId: String(m.id),
+            title: m.title ?? 'Sin título',
+            image: m.coverUrl ?? '',
+          })
+        )
+      sectionCallback(recentSection)
 
-    // Unread chapters
-    const unreadSection: HomeSection = App.createHomeSection({
-      id: 'unread',
-      title: 'Capítulos Sin Leer',
-      containsMoreItems: true,
-      type: HomeSectionType.singleRowNormal,
-    })
-    sectionCallback(unreadSection)
-    unreadSection.items = raw
-      .filter((m) => m.readingStatus && m.readingStatus.unreadChapters > 0)
-      .slice(0, 20)
-      .map((m) =>
+      // Unread chapters
+      const unreadSection: HomeSection = App.createHomeSection({
+        id: 'unread',
+        title: 'Capítulos Sin Leer',
+        containsMoreItems: true,
+        type: HomeSectionType.singleRowNormal,
+      })
+      sectionCallback(unreadSection)
+      unreadSection.items = raw
+        .filter((m) => m.readingStatus && m.readingStatus.unreadChapters > 0)
+        .slice(0, 20)
+        .map((m) =>
+          App.createPartialSourceManga({
+            mangaId: String(m.id),
+            title: m.title ?? 'Sin título',
+            image: m.coverUrl ?? '',
+            subtitle: `${m.readingStatus.unreadChapters} sin leer`,
+          })
+        )
+      sectionCallback(unreadSection)
+    } catch (err) {
+      const setupSection: HomeSection = App.createHomeSection({
+        id: 'setup',
+        title: 'Configuración Requerida',
+        containsMoreItems: false,
+        type: HomeSectionType.singleRowNormal,
+      })
+      sectionCallback(setupSection)
+      setupSection.items = [
         App.createPartialSourceManga({
-          mangaId: String(m.id),
-          title: m.title ?? 'Sin título',
-          image: m.coverUrl ?? '',
-          subtitle: `${m.readingStatus.unreadChapters} sin leer`,
+          mangaId: 'setup_help',
+          title: 'Toca aquí para ver cómo configurar la extensión',
+          image: '',
         })
-      )
-    sectionCallback(unreadSection)
+      ]
+      sectionCallback(setupSection)
+    }
   }
 
   async getViewMoreItems(
     homepageSectionId: string,
     _metadata: any
   ): Promise<PagedResults> {
-    const { host } = await this.creds()
-    const raw: any[] = await this.apiFetch(`${host}/api/v1/mangas`)
-    let results = raw
-    if (homepageSectionId === 'recent') {
-      results = [...raw].sort((a, b) => b.id - a.id)
-    } else if (homepageSectionId === 'unread') {
-      results = raw.filter(
-        (m) => m.readingStatus && m.readingStatus.unreadChapters > 0
-      )
+    try {
+      const { host } = await this.creds()
+      const raw: any[] = await this.apiFetch(`${host}/api/v1/mangas`)
+      let results = raw
+      if (homepageSectionId === 'recent') {
+        results = [...raw].sort((a, b) => b.id - a.id)
+      } else if (homepageSectionId === 'unread') {
+        results = raw.filter(
+          (m) => m.readingStatus && m.readingStatus.unreadChapters > 0
+        )
+      }
+      return App.createPagedResults({
+        results: results.map((m) =>
+          App.createPartialSourceManga({
+            mangaId: String(m.id),
+            title: m.title ?? 'Sin título',
+            image: m.coverUrl ?? '',
+          })
+        ),
+      })
+    } catch (err) {
+      return App.createPagedResults({ results: [] })
     }
-    return App.createPagedResults({
-      results: results.map((m) =>
-        App.createPartialSourceManga({
-          mangaId: String(m.id),
-          title: m.title ?? 'Sin título',
-          image: m.coverUrl ?? '',
-        })
-      ),
-    })
   }
 
   // ─── Settings UI ──────────────────────────────────────────────────────────
