@@ -13,7 +13,10 @@ import {
   SourceManga,
   Tag,
   TagSection,
+  RequestManager,
+  SourceStateManager,
 } from '@paperback/types'
+import { CheerioAPI } from 'cheerio'
 
 // ─── Declare runtime globals (injected by Paperback app) ─────────────────────
 // These are NOT available at bundle-evaluation time in Node; they are
@@ -54,10 +57,23 @@ function cleanHost(raw: string): string {
 
 // ─── Source Class ─────────────────────────────────────────────────────────────
 export class KaizenManga extends Source {
-  // stateManager and requestManager are injected by the Paperback runtime.
-  // We declare them to satisfy TypeScript.
-  readonly requestManager!: RequestManager
-  private stateManager!: SourceStateManager
+  readonly requestManager: RequestManager
+  private _stateManager?: SourceStateManager
+
+  constructor(cheerio: CheerioAPI) {
+    super(cheerio)
+    this.requestManager = App.createRequestManager({
+      requestsPerSecond: 5,
+      requestTimeout: 20000,
+    })
+  }
+
+  private get stateManager(): SourceStateManager {
+    if (!this._stateManager) {
+      this._stateManager = App.createSourceStateManager()
+    }
+    return this._stateManager
+  }
 
   private async creds(): Promise<{ host: string; token: string }> {
     const host  = ((await this.stateManager.retrieve('host')) as string) ?? ''
