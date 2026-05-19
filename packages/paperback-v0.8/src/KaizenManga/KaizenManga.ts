@@ -37,7 +37,7 @@ declare const App: any
 // This object is evaluated in Node by the toolchain to generate versioning.json.
 // It must be plain data — no runtime globals.
 export const KaizenMangaInfo: SourceInfo = {
-  version: '1.3.0',
+  version: '1.4.0',
   name: 'Kaizen Manga',
   icon: 'icon.png',
   author: 'D4nj3s (DanielJNavas)',
@@ -180,6 +180,28 @@ export class KaizenManga extends Source implements MangaProgressProviding {
         }),
       })
     }
+
+    if (mangaId.startsWith('genre:')) {
+      const genreName = mangaId.substring(6)
+      return App.createSourceManga({
+        id: mangaId,
+        mangaInfo: App.createMangaInfo({
+          titles: [genreName],
+          image: `data:image/svg+xml;utf8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="300" height="400" viewBox="0 0 300 400"><rect width="300" height="400" fill="#1a1a1a"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="#ffffff" font-family="sans-serif" font-size="24" font-weight="bold">${genreName.toUpperCase()}</text></svg>`)}`,
+          author: 'Kaizen',
+          desc: `Toca el tag "${genreName}" a continuación para ver todos los mangas en este género.`,
+          tags: [
+            App.createTagSection({
+              id: 'genres',
+              label: 'Géneros',
+              tags: [App.createTag({ id: genreName, label: genreName })]
+            })
+          ],
+          status: 'Completed',
+        }),
+      })
+    }
+
     const { host, token } = await this.creds()
     const raw = await this.apiFetch(`${host}/api/v1/mangas/${mangaId}`)
 
@@ -206,7 +228,7 @@ export class KaizenManga extends Source implements MangaProgressProviding {
 
   // ─── getChapters ──────────────────────────────────────────────────────────
   async getChapters(mangaId: string): Promise<Chapter[]> {
-    if (mangaId === 'setup_help') {
+    if (mangaId === 'setup_help' || mangaId.startsWith('genre:')) {
       return []
     }
     const { host } = await this.creds()
@@ -243,13 +265,24 @@ export class KaizenManga extends Source implements MangaProgressProviding {
     try {
       const { host, token } = await this.creds()
       const raw: any[] = await this.apiFetch(`${host}/api/v1/mangas`)
+      let results = raw
+
+      // Filter by text term
       const term = (query.title ?? '').toLowerCase().trim()
-      const filtered = term
-        ? raw.filter((m) => (m.title ?? '').toLowerCase().includes(term))
-        : raw
+      if (term) {
+        results = results.filter((m) => (m.title ?? '').toLowerCase().includes(term))
+      }
+
+      // Filter by tags (genres)
+      const selectedTags = (query.includedTags ?? []).map((t) => t.id)
+      if (selectedTags.length > 0) {
+        results = results.filter((m) =>
+          (m.metadata?.genres ?? []).some((g: string) => selectedTags.includes(g))
+        )
+      }
 
       return App.createPagedResults({
-        results: filtered.map((m) =>
+        results: results.map((m) =>
           App.createPartialSourceManga({
             mangaId: String(m.id),
             title: m.title ?? 'Sin título',
@@ -265,6 +298,32 @@ export class KaizenManga extends Source implements MangaProgressProviding {
     }
   }
 
+  // ─── getSearchTags ────────────────────────────────────────────────────────
+  async getSearchTags(): Promise<TagSection[]> {
+    try {
+      const { host } = await this.creds()
+      const raw: any[] = await this.apiFetch(`${host}/api/v1/mangas`)
+      const genreSet = new Set<string>()
+      for (const m of raw) {
+        for (const g of m.metadata?.genres ?? []) {
+          if (g) genreSet.add(g)
+        }
+      }
+      const tags = Array.from(genreSet).sort().map((g) =>
+        App.createTag({ id: g, label: g })
+      )
+      return [
+        App.createTagSection({
+          id: 'genres',
+          label: 'Géneros',
+          tags,
+        })
+      ]
+    } catch (err) {
+      return []
+    }
+  }
+
   // ─── getHomePageSections ──────────────────────────────────────────────────
   async getHomePageSections(
     sectionCallback: (section: HomeSection) => void
@@ -272,6 +331,30 @@ export class KaizenManga extends Source implements MangaProgressProviding {
     try {
       const { host, token } = await this.creds()
       const raw: any[] = await this.apiFetch(`${host}/api/v1/mangas`)
+
+      // Genres (rows of genres as custom cards)
+      const genresSection: HomeSection = App.createHomeSection({
+        id: 'genres_section',
+        title: 'Géneros',
+        containsMoreItems: false,
+        type: HomeSectionType.singleRowNormal,
+        items: [],
+      })
+      sectionCallback(genresSection)
+      const genreSet = new Set<string>()
+      for (const m of raw) {
+        for (const g of m.metadata?.genres ?? []) {
+          if (g) genreSet.add(g)
+        }
+      }
+      genresSection.items = Array.from(genreSet).sort().map((g) =>
+        App.createPartialSourceManga({
+          mangaId: `genre:${g}`,
+          title: g,
+          image: `data:image/svg+xml;utf8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="300" height="400" viewBox="0 0 300 400"><rect width="300" height="400" fill="#1a1a1a"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="#ffffff" font-family="sans-serif" font-size="24" font-weight="bold">${g.toUpperCase()}</text></svg>`)}`,
+        })
+      )
+      sectionCallback(genresSection)
 
       // On Deck (mangas started but not fully read)
       const onDeckSection: HomeSection = App.createHomeSection({
