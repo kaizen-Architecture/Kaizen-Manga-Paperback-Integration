@@ -37,7 +37,7 @@ declare const App: any
 // This object is evaluated in Node by the toolchain to generate versioning.json.
 // It must be plain data — no runtime globals.
 export const KaizenMangaInfo: SourceInfo = {
-  version: '1.4.3',
+  version: '1.4.4',
   name: 'Kaizen Manga',
   icon: 'icon.png',
   author: 'D4nj3s (DanielJNavas)',
@@ -318,19 +318,39 @@ export class KaizenManga extends Source implements MangaProgressProviding {
   async getHomePageSections(
     sectionCallback: (section: HomeSection) => void
   ): Promise<void> {
+    // 1. Create and callback empty base sections immediately to trigger skeleton loaders
+    const onDeckSection: HomeSection = App.createHomeSection({
+      id: 'on_deck',
+      title: 'En Curso (On Deck)',
+      containsMoreItems: true,
+      type: HomeSectionType.singleRowNormal,
+      items: [],
+    })
+    sectionCallback(onDeckSection)
+
+    const recentSection: HomeSection = App.createHomeSection({
+      id: 'recent',
+      title: 'Recientemente Añadidos',
+      containsMoreItems: true,
+      type: HomeSectionType.singleRowNormal,
+      items: [],
+    })
+    sectionCallback(recentSection)
+
+    const unreadSection: HomeSection = App.createHomeSection({
+      id: 'unread',
+      title: 'Capítulos Sin Leer',
+      containsMoreItems: true,
+      type: HomeSectionType.singleRowNormal,
+      items: [],
+    })
+    sectionCallback(unreadSection)
+
     try {
       const { host, token } = await this.creds()
       const raw: any[] = await this.getCachedMangas(host)
 
-      // On Deck (mangas started but not fully read)
-      const onDeckSection: HomeSection = App.createHomeSection({
-        id: 'on_deck',
-        title: 'En Curso (On Deck)',
-        containsMoreItems: true,
-        type: HomeSectionType.singleRowNormal,
-        items: [],
-      })
-      sectionCallback(onDeckSection)
+      // Populate On Deck
       onDeckSection.items = raw
         .filter((m) => m.readingStatus && m.readingStatus.readChapters > 0 && !m.readingStatus.isFullyRead)
         .slice(0, 20)
@@ -344,15 +364,7 @@ export class KaizenManga extends Source implements MangaProgressProviding {
         )
       sectionCallback(onDeckSection)
 
-      // Recently added
-      const recentSection: HomeSection = App.createHomeSection({
-        id: 'recent',
-        title: 'Recientemente Añadidos',
-        containsMoreItems: true,
-        type: HomeSectionType.singleRowNormal,
-        items: [],
-      })
-      sectionCallback(recentSection)
+      // Populate Recently Added
       recentSection.items = [...raw]
         .sort((a, b) => b.id - a.id)
         .slice(0, 20)
@@ -365,15 +377,7 @@ export class KaizenManga extends Source implements MangaProgressProviding {
         )
       sectionCallback(recentSection)
 
-      // Unread chapters
-      const unreadSection: HomeSection = App.createHomeSection({
-        id: 'unread',
-        title: 'Capítulos Sin Leer',
-        containsMoreItems: true,
-        type: HomeSectionType.singleRowNormal,
-        items: [],
-      })
-      sectionCallback(unreadSection)
+      // Populate Unread Chapters
       unreadSection.items = raw
         .filter((m) => m.readingStatus && m.readingStatus.unreadChapters > 0)
         .slice(0, 20)
@@ -417,6 +421,14 @@ export class KaizenManga extends Source implements MangaProgressProviding {
         sectionCallback(libSection)
       }
     } catch (err) {
+      // Clear main sections if they failed
+      onDeckSection.items = []
+      sectionCallback(onDeckSection)
+      recentSection.items = []
+      sectionCallback(recentSection)
+      unreadSection.items = []
+      sectionCallback(unreadSection)
+
       const setupSection: HomeSection = App.createHomeSection({
         id: 'setup',
         title: 'Configuración Requerida',
