@@ -194,7 +194,7 @@ export class KaizenManga extends Source implements MangaProgressProviding {
     return { host: cleaned, token: token.trim() }
   }
 
-  private async apiFetch(url: string, method = 'GET', body?: string): Promise<any> {
+  private async apiFetch(url: string, method = 'GET', body?: any): Promise<any> {
     const { token } = await this.creds()
     const req = App.createRequest({
       url,
@@ -204,7 +204,7 @@ export class KaizenManga extends Source implements MangaProgressProviding {
         'Content-Type': 'application/json',
         Accept: 'application/json',
       },
-      data: body,
+      data: typeof body === 'string' ? JSON.parse(body) : body,
     })
     const resp = await this.requestManager.schedule(req, 1)
     if (resp.status >= 400) {
@@ -758,14 +758,14 @@ export class KaizenManga extends Source implements MangaProgressProviding {
             continue
           }
 
-          const body = JSON.stringify({
+          const body = {
             chapters: [
               {
                 id: chapterId,
                 isRead: true,
               },
             ],
-          })
+          }
           await this.apiFetch(`${host}/api/v1/mangas/${mangaId}`, 'PATCH', body)
           await actionQueue.discardChapterReadAction(readAction)
         } catch (err) {
