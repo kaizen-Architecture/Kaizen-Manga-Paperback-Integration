@@ -169,28 +169,32 @@ export class KaizenManga extends Source implements MangaProgressProviding {
         }),
       })
     }
-    const { host, token } = await this.creds()
-    const raw = await this.apiFetch(`${host}/api/v1/mangas/${mangaId}`)
+    try {
+      const { host, token } = await this.creds()
+      const raw = await this.apiFetch(`${host}/api/v1/mangas/${mangaId}`)
 
-    const tags: Tag[] = (raw.metadata?.genres ?? []).map((g: string) =>
-      App.createTag({ id: g, label: g })
-    )
-    const tagSections: TagSection[] = tags.length
-      ? [App.createTagSection({ id: 'genres', label: 'Géneros', tags })]
-      : []
+      const tags: Tag[] = (raw.metadata?.genres ?? []).map((g: string) =>
+        App.createTag({ id: g, label: g })
+      )
+      const tagSections: TagSection[] = tags.length
+        ? [App.createTagSection({ id: 'genres', label: 'Géneros', tags })]
+        : []
 
-    return App.createSourceManga({
-      id: mangaId,
-      mangaInfo: App.createMangaInfo({
-        titles: [raw.title ?? 'Sin título'],
-        image: getCoverUrl(raw.metadata, host, token),
-        author: raw.metadata?.authors?.join(', ') || 'Desconocido',
-        artist: '',
-        desc: raw.metadata?.summary || 'Sin descripción.',
-        tags: tagSections,
-        status: raw.metadata?.status === 'ONGOING' ? 'Ongoing' : 'Completed',
-      }),
-    })
+      return App.createSourceManga({
+        id: mangaId,
+        mangaInfo: App.createMangaInfo({
+          titles: [raw.title ?? 'Sin título'],
+          image: getCoverUrl(raw.metadata, host, token),
+          author: raw.metadata?.authors?.join(', ') || 'Desconocido',
+          artist: '',
+          desc: raw.metadata?.summary || 'Sin descripción.',
+          tags: tagSections,
+          status: raw.metadata?.status === 'ONGOING' ? 'Ongoing' : 'Completed',
+        }),
+      })
+    } catch (e: any) {
+      throw new Error(`Error obteniendo detalles del manga: ${e.message}`)
+    }
   }
 
   // ─── getChapters ──────────────────────────────────────────────────────────
@@ -198,18 +202,22 @@ export class KaizenManga extends Source implements MangaProgressProviding {
     if (mangaId === 'setup_help') {
       return []
     }
-    const { host } = await this.creds()
-    const raw = await this.apiFetch(`${host}/api/v1/mangas/${mangaId}`)
-    return (raw.chapters ?? []).map((ch: any) =>
-      App.createChapter({
-        id: String(ch.id),
-        mangaId,
-        chapNum: ch.index ?? 0,
-        name: ch.name ?? `Capítulo ${ch.index}`,
-        langCode: '🇬🇧',
-        time: ch.createdAt ? new Date(ch.createdAt) : undefined,
-      })
-    )
+    try {
+      const { host } = await this.creds()
+      const raw = await this.apiFetch(`${host}/api/v1/mangas/${mangaId}`)
+      return (raw.chapters ?? []).map((ch: any) =>
+        App.createChapter({
+          id: String(ch.id),
+          mangaId,
+          chapNum: ch.index ?? 0,
+          name: ch.name ?? `Capítulo ${ch.index}`,
+          langCode: '🇬🇧',
+          time: ch.createdAt ? new Date(ch.createdAt) : undefined,
+        })
+      )
+    } catch (e: any) {
+      throw new Error(`Error obteniendo capítulos: ${e.message}`)
+    }
   }
 
   // ─── getChapterDetails ────────────────────────────────────────────────────
@@ -217,14 +225,21 @@ export class KaizenManga extends Source implements MangaProgressProviding {
     if (mangaId === 'setup_help') {
       return App.createChapterDetails({ id: chapterId, mangaId, pages: [] })
     }
-    const { host } = await this.creds()
-    const raw = await this.apiFetch(
-      `${host}/api/v1/mangas/${mangaId}/chapters/${chapterId}/pages`
-    )
-    const pages: string[] = (raw.pages ?? []).map((p: any) => {
-      return `FAKE*/page_${p.index}.png?*REAL*${host}${p.url}`
-    })
-    return App.createChapterDetails({ id: chapterId, mangaId, pages })
+    try {
+      const { host } = await this.creds()
+      const raw = await this.apiFetch(
+        `${host}/api/v1/mangas/${mangaId}/chapters/${chapterId}/pages`
+      )
+      const pages: string[] = (raw.pages ?? []).map((p: any) => {
+        return `FAKE*/page_${p.index}.png?*REAL*${host}${p.url}`
+      })
+      return App.createChapterDetails({ id: chapterId, mangaId, pages })
+    } catch (e: any) {
+      if (e.message?.includes('404')) {
+        throw new Error('Error 404: ¿Tu servidor Kaizen Manga está actualizado a v1.12+ y el archivo .cbz existe?')
+      }
+      throw new Error(`Error obteniendo detalles del capítulo: ${e.message}`)
+    }
   }
 
   // ─── getSearchResults ─────────────────────────────────────────────────────
