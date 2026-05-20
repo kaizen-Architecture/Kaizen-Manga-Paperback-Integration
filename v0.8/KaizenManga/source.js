@@ -729,7 +729,7 @@ var _Sources = (() => {
   });
   var import_types = __toESM(require_lib());
   var KaizenMangaInfo = {
-    version: "1.4.3",
+    version: "1.4.4",
     name: "Kaizen Manga",
     icon: "icon.png",
     author: "D4nj3s (DanielJNavas)",
@@ -859,56 +859,71 @@ var _Sources = (() => {
           })
         });
       }
-      const { host, token } = await this.creds();
-      const raw = await this.apiFetch(`${host}/api/v1/mangas/${mangaId}`);
-      const tags = (raw.metadata?.genres ?? []).map(
-        (g) => App.createTag({ id: g, label: g })
-      );
-      const tagSections = tags.length ? [App.createTagSection({ id: "genres", label: "Genres", tags })] : [];
-      return App.createSourceManga({
-        id: mangaId,
-        mangaInfo: App.createMangaInfo({
-          titles: [raw.title ?? "Sin t\xEDtulo"],
-          image: getCoverUrl(raw.metadata, host, token),
-          author: raw.metadata?.authors?.join(", ") || "Desconocido",
-          artist: "",
-          desc: raw.metadata?.summary || "Sin descripci\xF3n.",
-          tags: tagSections,
-          status: raw.metadata?.status === "ONGOING" ? "Ongoing" : "Completed"
-        })
-      });
+      try {
+        const { host, token } = await this.creds();
+        const raw = await this.apiFetch(`${host}/api/v1/mangas/${mangaId}`);
+        const tags = (raw.metadata?.genres ?? []).map(
+          (g) => App.createTag({ id: g, label: g })
+        );
+        const tagSections = tags.length ? [App.createTagSection({ id: "genres", label: "Genres", tags })] : [];
+        return App.createSourceManga({
+          id: mangaId,
+          mangaInfo: App.createMangaInfo({
+            titles: [raw.title ?? "Sin t\xEDtulo"],
+            image: getCoverUrl(raw.metadata, host, token),
+            author: raw.metadata?.authors?.join(", ") || "Desconocido",
+            artist: "",
+            desc: raw.metadata?.summary || "Sin descripci\xF3n.",
+            tags: tagSections,
+            status: raw.metadata?.status === "ONGOING" ? "Ongoing" : "Completed"
+          })
+        });
+      } catch (e) {
+        throw new Error(`Error obteniendo detalles del manga: ${e.message}`);
+      }
     }
     // ─── getChapters ──────────────────────────────────────────────────────────
     async getChapters(mangaId) {
       if (mangaId === "setup_help") {
         return [];
       }
-      const { host } = await this.creds();
-      const raw = await this.apiFetch(`${host}/api/v1/mangas/${mangaId}`);
-      return (raw.chapters ?? []).map(
-        (ch) => App.createChapter({
-          id: String(ch.id),
-          mangaId,
-          chapNum: ch.index ?? 0,
-          name: ch.name ?? `Cap\xEDtulo ${ch.index}`,
-          langCode: "\u{1F1EC}\u{1F1E7}",
-          time: ch.createdAt ? new Date(ch.createdAt) : void 0
-        })
-      );
+      try {
+        const { host } = await this.creds();
+        const raw = await this.apiFetch(`${host}/api/v1/mangas/${mangaId}`);
+        return (raw.chapters ?? []).map(
+          (ch) => App.createChapter({
+            id: String(ch.id),
+            mangaId,
+            chapNum: ch.index ?? 0,
+            name: ch.name ?? `Cap\xEDtulo ${ch.index}`,
+            langCode: "\u{1F1EC}\u{1F1E7}",
+            time: ch.createdAt ? new Date(ch.createdAt) : void 0
+          })
+        );
+      } catch (e) {
+        throw new Error(`Error obteniendo cap\xEDtulos: ${e.message}`);
+      }
     }
     // ─── getChapterDetails ────────────────────────────────────────────────────
     async getChapterDetails(mangaId, chapterId) {
       if (mangaId === "setup_help") {
         return App.createChapterDetails({ id: chapterId, mangaId, pages: [] });
       }
-      const { host } = await this.creds();
-      const raw = await this.apiFetch(
-        `${host}/api/v1/mangas/${mangaId}/chapters/${chapterId}/pages`
-      );
-      const pages = (raw.pages ?? []).map((p) => {
-        return `FAKE*/page_${p.index}.png?*REAL*${host}${p.url}`;
-      });
-      return App.createChapterDetails({ id: chapterId, mangaId, pages });
+      try {
+        const { host } = await this.creds();
+        const raw = await this.apiFetch(
+          `${host}/api/v1/mangas/${mangaId}/chapters/${chapterId}/pages`
+        );
+        const pages = (raw.pages ?? []).map((p) => {
+          return `FAKE*/page_${p.index}.png?*REAL*${host}${p.url}`;
+        });
+        return App.createChapterDetails({ id: chapterId, mangaId, pages });
+      } catch (e) {
+        if (e.message?.includes("404")) {
+          throw new Error("Error 404: \xBFTu servidor Kaizen Manga est\xE1 actualizado a v1.12+ y el archivo .cbz existe?");
+        }
+        throw new Error(`Error obteniendo detalles del cap\xEDtulo: ${e.message}`);
+      }
     }
     // ─── getSearchResults ─────────────────────────────────────────────────────
     async getSearchResults(query, _metadata) {
@@ -967,17 +982,33 @@ var _Sources = (() => {
     }
     // ─── getHomePageSections ──────────────────────────────────────────────────
     async getHomePageSections(sectionCallback) {
+      const onDeckSection = App.createHomeSection({
+        id: "on_deck",
+        title: "En Curso (On Deck)",
+        containsMoreItems: true,
+        type: import_types.HomeSectionType.singleRowNormal,
+        items: []
+      });
+      sectionCallback(onDeckSection);
+      const recentSection = App.createHomeSection({
+        id: "recent",
+        title: "Recientemente A\xF1adidos",
+        containsMoreItems: true,
+        type: import_types.HomeSectionType.singleRowNormal,
+        items: []
+      });
+      sectionCallback(recentSection);
+      const unreadSection = App.createHomeSection({
+        id: "unread",
+        title: "Cap\xEDtulos Sin Leer",
+        containsMoreItems: true,
+        type: import_types.HomeSectionType.singleRowNormal,
+        items: []
+      });
+      sectionCallback(unreadSection);
       try {
         const { host, token } = await this.creds();
         const raw = await this.getCachedMangas(host);
-        const onDeckSection = App.createHomeSection({
-          id: "on_deck",
-          title: "En Curso (On Deck)",
-          containsMoreItems: true,
-          type: import_types.HomeSectionType.singleRowNormal,
-          items: []
-        });
-        sectionCallback(onDeckSection);
         onDeckSection.items = raw.filter((m) => m.readingStatus && m.readingStatus.readChapters > 0 && !m.readingStatus.isFullyRead).slice(0, 20).map(
           (m) => App.createPartialSourceManga({
             mangaId: String(m.id),
@@ -987,14 +1018,6 @@ var _Sources = (() => {
           })
         );
         sectionCallback(onDeckSection);
-        const recentSection = App.createHomeSection({
-          id: "recent",
-          title: "Recientemente A\xF1adidos",
-          containsMoreItems: true,
-          type: import_types.HomeSectionType.singleRowNormal,
-          items: []
-        });
-        sectionCallback(recentSection);
         recentSection.items = [...raw].sort((a, b) => b.id - a.id).slice(0, 20).map(
           (m) => App.createPartialSourceManga({
             mangaId: String(m.id),
@@ -1003,14 +1026,6 @@ var _Sources = (() => {
           })
         );
         sectionCallback(recentSection);
-        const unreadSection = App.createHomeSection({
-          id: "unread",
-          title: "Cap\xEDtulos Sin Leer",
-          containsMoreItems: true,
-          type: import_types.HomeSectionType.singleRowNormal,
-          items: []
-        });
-        sectionCallback(unreadSection);
         unreadSection.items = raw.filter((m) => m.readingStatus && m.readingStatus.unreadChapters > 0).slice(0, 20).map(
           (m) => App.createPartialSourceManga({
             mangaId: String(m.id),
@@ -1048,6 +1063,12 @@ var _Sources = (() => {
           sectionCallback(libSection);
         }
       } catch (err) {
+        onDeckSection.items = [];
+        sectionCallback(onDeckSection);
+        recentSection.items = [];
+        sectionCallback(recentSection);
+        unreadSection.items = [];
+        sectionCallback(unreadSection);
         const setupSection = App.createHomeSection({
           id: "setup",
           title: "Configuraci\xF3n Requerida",
