@@ -729,7 +729,7 @@ var _Sources = (() => {
   });
   var import_types = __toESM(require_lib());
   var KaizenMangaInfo = {
-    version: "1.4.4",
+    version: "1.4.5",
     name: "Kaizen Manga",
     icon: "icon.png",
     author: "D4nj3s (DanielJNavas)",
@@ -801,12 +801,45 @@ var _Sources = (() => {
     }
     async getCachedMangas(host) {
       const now = Date.now();
-      if (this._mangasCache && now - this._mangasCache.timestamp < 15e3) {
+      const CACHE_TTL = 10 * 60 * 1e3;
+      if (this._mangasCache && now - this._mangasCache.timestamp < CACHE_TTL) {
         return this._mangasCache.data;
+      }
+      try {
+        const persistedStr = await this.stateManager.retrieve("mangas_cache") ?? "";
+        const persistedTimeStr = await this.stateManager.retrieve("mangas_cache_time") ?? "";
+        if (persistedStr && persistedTimeStr) {
+          const persistedTime = parseInt(persistedTimeStr, 10);
+          if (!isNaN(persistedTime) && now - persistedTime < CACHE_TTL) {
+            const parsed = JSON.parse(persistedStr);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              this._mangasCache = { data: parsed, timestamp: persistedTime };
+              this.refreshMangasCacheInBackground(host).catch(() => {
+              });
+              return parsed;
+            }
+          }
+        }
+      } catch (_) {
       }
       const data = await this.apiFetch(`${host}/api/v1/mangas`);
       this._mangasCache = { data, timestamp: now };
+      try {
+        await this.stateManager.store("mangas_cache", JSON.stringify(data));
+        await this.stateManager.store("mangas_cache_time", String(now));
+      } catch (_) {
+      }
       return data;
+    }
+    async refreshMangasCacheInBackground(host) {
+      try {
+        const data = await this.apiFetch(`${host}/api/v1/mangas`);
+        const now = Date.now();
+        this._mangasCache = { data, timestamp: now };
+        await this.stateManager.store("mangas_cache", JSON.stringify(data));
+        await this.stateManager.store("mangas_cache_time", String(now));
+      } catch (_) {
+      }
     }
     async creds() {
       const host = await this.stateManager.retrieve("host") ?? "";
