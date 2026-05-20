@@ -37,7 +37,7 @@ declare const App: any
 // This object is evaluated in Node by the toolchain to generate versioning.json.
 // It must be plain data — no runtime globals.
 export const KaizenMangaInfo: SourceInfo = {
-  version: '1.4.5',
+  version: '1.4.6',
   name: 'Kaizen Manga',
   icon: 'icon.png',
   author: 'D4nj3s (DanielJNavas)',
@@ -129,16 +129,16 @@ export class KaizenManga extends Source implements MangaProgressProviding {
     })
   }
 
-  private async getCachedMangas(host: string): Promise<any[]> {
+  private async getCachedMangasIfValid(): Promise<any[] | null> {
     const now = Date.now()
     const CACHE_TTL = 10 * 60 * 1000 // 10 minutes cache TTL
 
-    // 1. Memory cache check
+    // Memory cache check
     if (this._mangasCache && (now - this._mangasCache.timestamp < CACHE_TTL)) {
       return this._mangasCache.data
     }
 
-    // 2. Persistent storage cache check
+    // Persistent storage cache check
     try {
       const persistedStr = ((await this.stateManager.retrieve('mangas_cache')) as string) ?? ''
       const persistedTimeStr = ((await this.stateManager.retrieve('mangas_cache_time')) as string) ?? ''
@@ -148,16 +148,21 @@ export class KaizenManga extends Source implements MangaProgressProviding {
           const parsed = JSON.parse(persistedStr)
           if (Array.isArray(parsed) && parsed.length > 0) {
             this._mangasCache = { data: parsed, timestamp: persistedTime }
-            // Trigger asynchronous background cache update (fire and forget)
-            this.refreshMangasCacheInBackground(host).catch(() => {})
             return parsed
           }
         }
       }
     } catch (_) {}
 
-    // 3. Blocking fallback if no cache exists or cache is expired
+    return null
+  }
+
+  private async getCachedMangas(host: string): Promise<any[]> {
+    const cached = await this.getCachedMangasIfValid()
+    if (cached) return cached
+
     const data: any[] = await this.apiFetch(`${host}/api/v1/mangas`)
+    const now = Date.now()
     this._mangasCache = { data, timestamp: now }
     try {
       await this.stateManager.store('mangas_cache', JSON.stringify(data))
@@ -166,14 +171,17 @@ export class KaizenManga extends Source implements MangaProgressProviding {
     return data
   }
 
-  private async refreshMangasCacheInBackground(host: string): Promise<void> {
+  private async refreshMangasCacheInBackground(host: string): Promise<any[]> {
     try {
       const data: any[] = await this.apiFetch(`${host}/api/v1/mangas`)
       const now = Date.now()
       this._mangasCache = { data, timestamp: now }
       await this.stateManager.store('mangas_cache', JSON.stringify(data))
       await this.stateManager.store('mangas_cache_time', String(now))
-    } catch (_) {}
+      return data
+    } catch (_) {
+      return []
+    }
   }
 
   private async creds(): Promise<{ host: string; token: string }> {
@@ -369,7 +377,27 @@ export class KaizenManga extends Source implements MangaProgressProviding {
   async getHomePageSections(
     sectionCallback: (section: HomeSection) => void
   ): Promise<void> {
-    // 1. Create and callback empty base sections immediately to trigger skeleton loaders
+    try {
+      const { host, token } = await this.creds()
+      
+      // Try to load cached mangas from memory or storage
+      const cached = await this.getCachedMangasIfValid()
+      
+      if (cached && cached.length > 0) {
+        // Render instantly using cached data (no flicker, no skeletons!)
+        this.renderSections(sectionCallback, cached, host, token)
+        
+        // Trigger a background refresh to keep data updated
+        this.refreshMangasCacheInBackground(host).then((newData) => {
+          if (newData && newData.length > 0) {
+            this.renderSections(sectionCallback, newData, host, token)
+          }
+        }).catch(() => {})
+        return
+      }
+    } catch (_) {}
+
+    // Fallback: No cache available (first run). Render skeleton loaders, then fetch blocking.
     const onDeckSection: HomeSection = App.createHomeSection({
       id: 'on_deck',
       title: 'En Curso (On Deck)',
@@ -399,78 +427,16 @@ export class KaizenManga extends Source implements MangaProgressProviding {
 
     try {
       const { host, token } = await this.creds()
-      const raw: any[] = await this.getCachedMangas(host)
+      const raw: any[] = await this.apiFetch(`${host}/api/v1/mangas`)
+      
+      // Update cache
+      const now = Date.now()
+      this._mangasCache = { data: raw, timestamp: now }
+      await this.stateManager.store('mangas_cache', JSON.stringify(raw))
+      await this.stateManager.store('mangas_cache_time', String(now))
 
-      // Populate On Deck
-      onDeckSection.items = raw
-        .filter((m) => m.readingStatus && m.readingStatus.readChapters > 0 && !m.readingStatus.isFullyRead)
-        .slice(0, 20)
-        .map((m) =>
-          App.createPartialSourceManga({
-            mangaId: String(m.id),
-            title: m.title ?? 'Sin título',
-            image: getCoverUrl(m.metadata, host, token),
-            subtitle: `${m.readingStatus.readChapters}/${m.readingStatus.totalChapters} leídos`,
-          })
-        )
-      sectionCallback(onDeckSection)
-
-      // Populate Recently Added
-      recentSection.items = [...raw]
-        .sort((a, b) => b.id - a.id)
-        .slice(0, 20)
-        .map((m) =>
-          App.createPartialSourceManga({
-            mangaId: String(m.id),
-            title: m.title ?? 'Sin título',
-            image: getCoverUrl(m.metadata, host, token),
-          })
-        )
-      sectionCallback(recentSection)
-
-      // Populate Unread Chapters
-      unreadSection.items = raw
-        .filter((m) => m.readingStatus && m.readingStatus.unreadChapters > 0)
-        .slice(0, 20)
-        .map((m) =>
-          App.createPartialSourceManga({
-            mangaId: String(m.id),
-            title: m.title ?? 'Sin título',
-            image: getCoverUrl(m.metadata, host, token),
-            subtitle: `${m.readingStatus.unreadChapters} sin leer`,
-          })
-        )
-      sectionCallback(unreadSection)
-
-      // Group by library dynamically
-      const libraryMap = new Map<string, any[]>()
-      for (const m of raw) {
-        const libName = m.library?.name?.trim() || 'Library'
-        if (!libraryMap.has(libName)) {
-          libraryMap.set(libName, [])
-        }
-        libraryMap.get(libName)!.push(m)
-      }
-
-      for (const [libName, libMangas] of libraryMap.entries()) {
-        const libId = `lib_${libName.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`
-        const libSection: HomeSection = App.createHomeSection({
-          id: libId,
-          title: libName,
-          containsMoreItems: true,
-          type: HomeSectionType.singleRowNormal,
-          items: [],
-        })
-        sectionCallback(libSection)
-        libSection.items = libMangas.slice(0, 20).map((m) =>
-          App.createPartialSourceManga({
-            mangaId: String(m.id),
-            title: m.title ?? 'Sin título',
-            image: getCoverUrl(m.metadata, host, token),
-          })
-        )
-        sectionCallback(libSection)
-      }
+      // Populate sections
+      this.renderSections(sectionCallback, raw, host, token)
     } catch (err) {
       // Clear main sections if they failed
       onDeckSection.items = []
@@ -496,6 +462,100 @@ export class KaizenManga extends Source implements MangaProgressProviding {
         })
       ]
       sectionCallback(setupSection)
+    }
+  }
+
+  private renderSections(
+    sectionCallback: (section: HomeSection) => void,
+    raw: any[],
+    host: string,
+    token: string
+  ): void {
+    // On Deck (mangas started but not fully read)
+    const onDeckSection: HomeSection = App.createHomeSection({
+      id: 'on_deck',
+      title: 'En Curso (On Deck)',
+      containsMoreItems: true,
+      type: HomeSectionType.singleRowNormal,
+      items: raw
+        .filter((m) => m.readingStatus && m.readingStatus.readChapters > 0 && !m.readingStatus.isFullyRead)
+        .slice(0, 20)
+        .map((m) =>
+          App.createPartialSourceManga({
+            mangaId: String(m.id),
+            title: m.title ?? 'Sin título',
+            image: getCoverUrl(m.metadata, host, token),
+            subtitle: `${m.readingStatus.readChapters}/${m.readingStatus.totalChapters} leídos`,
+          })
+        ),
+    })
+    sectionCallback(onDeckSection)
+
+    // Recently added
+    const recentSection: HomeSection = App.createHomeSection({
+      id: 'recent',
+      title: 'Recientemente Añadidos',
+      containsMoreItems: true,
+      type: HomeSectionType.singleRowNormal,
+      items: [...raw]
+        .sort((a, b) => b.id - a.id)
+        .slice(0, 20)
+        .map((m) =>
+          App.createPartialSourceManga({
+            mangaId: String(m.id),
+            title: m.title ?? 'Sin título',
+            image: getCoverUrl(m.metadata, host, token),
+          })
+        ),
+    })
+    sectionCallback(recentSection)
+
+    // Unread chapters
+    const unreadSection: HomeSection = App.createHomeSection({
+      id: 'unread',
+      title: 'Capítulos Sin Leer',
+      containsMoreItems: true,
+      type: HomeSectionType.singleRowNormal,
+      items: raw
+        .filter((m) => m.readingStatus && m.readingStatus.unreadChapters > 0)
+        .slice(0, 20)
+        .map((m) =>
+          App.createPartialSourceManga({
+            mangaId: String(m.id),
+            title: m.title ?? 'Sin título',
+            image: getCoverUrl(m.metadata, host, token),
+            subtitle: `${m.readingStatus.unreadChapters} sin leer`,
+          })
+        ),
+    })
+    sectionCallback(unreadSection)
+
+    // Group by library dynamically
+    const libraryMap = new Map<string, any[]>()
+    for (const m of raw) {
+      const libName = m.library?.name?.trim() || 'Library'
+      if (!libraryMap.has(libName)) {
+        libraryMap.set(libName, [])
+      }
+      libraryMap.get(libName)!.push(m)
+    }
+
+    for (const [libName, libMangas] of libraryMap.entries()) {
+      const libId = `lib_${libName.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`
+      const libSection: HomeSection = App.createHomeSection({
+        id: libId,
+        title: libName,
+        containsMoreItems: true,
+        type: HomeSectionType.singleRowNormal,
+        items: libMangas.slice(0, 20).map((m) =>
+          App.createPartialSourceManga({
+            mangaId: String(m.id),
+            title: m.title ?? 'Sin título',
+            image: getCoverUrl(m.metadata, host, token),
+          })
+        ),
+      })
+      sectionCallback(libSection)
     }
   }
 
