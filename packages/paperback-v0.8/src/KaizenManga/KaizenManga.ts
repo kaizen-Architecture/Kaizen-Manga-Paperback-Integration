@@ -190,6 +190,7 @@ export class KaizenManga extends Source implements MangaProgressProviding {
           status: 'Completed',
         }),
       })
+    }
     try {
       const { host, token } = await this.creds()
       const raw = await this.apiFetch(`${host}/api/v1/mangas/${mangaId}`)
