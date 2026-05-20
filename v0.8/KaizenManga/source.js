@@ -729,7 +729,7 @@ var _Sources = (() => {
   });
   var import_types = __toESM(require_lib());
   var KaizenMangaInfo = {
-    version: "1.4.5",
+    version: "1.4.6",
     name: "Kaizen Manga",
     icon: "icon.png",
     author: "D4nj3s (DanielJNavas)",
@@ -799,7 +799,7 @@ var _Sources = (() => {
         interceptor: new KaizenInterceptor(this.stateManager)
       });
     }
-    async getCachedMangas(host) {
+    async getCachedMangasIfValid() {
       const now = Date.now();
       const CACHE_TTL = 10 * 60 * 1e3;
       if (this._mangasCache && now - this._mangasCache.timestamp < CACHE_TTL) {
@@ -814,15 +814,19 @@ var _Sources = (() => {
             const parsed = JSON.parse(persistedStr);
             if (Array.isArray(parsed) && parsed.length > 0) {
               this._mangasCache = { data: parsed, timestamp: persistedTime };
-              this.refreshMangasCacheInBackground(host).catch(() => {
-              });
               return parsed;
             }
           }
         }
       } catch (_) {
       }
+      return null;
+    }
+    async getCachedMangas(host) {
+      const cached = await this.getCachedMangasIfValid();
+      if (cached) return cached;
       const data = await this.apiFetch(`${host}/api/v1/mangas`);
+      const now = Date.now();
       this._mangasCache = { data, timestamp: now };
       try {
         await this.stateManager.store("mangas_cache", JSON.stringify(data));
@@ -838,7 +842,9 @@ var _Sources = (() => {
         this._mangasCache = { data, timestamp: now };
         await this.stateManager.store("mangas_cache", JSON.stringify(data));
         await this.stateManager.store("mangas_cache_time", String(now));
+        return data;
       } catch (_) {
+        return [];
       }
     }
     async creds() {
@@ -1015,6 +1021,21 @@ var _Sources = (() => {
     }
     // ─── getHomePageSections ──────────────────────────────────────────────────
     async getHomePageSections(sectionCallback) {
+      try {
+        const { host, token } = await this.creds();
+        const cached = await this.getCachedMangasIfValid();
+        if (cached && cached.length > 0) {
+          this.renderSections(sectionCallback, cached, host, token);
+          this.refreshMangasCacheInBackground(host).then((newData) => {
+            if (newData && newData.length > 0) {
+              this.renderSections(sectionCallback, newData, host, token);
+            }
+          }).catch(() => {
+          });
+          return;
+        }
+      } catch (_) {
+      }
       const onDeckSection = App.createHomeSection({
         id: "on_deck",
         title: "En Curso (On Deck)",
@@ -1041,60 +1062,12 @@ var _Sources = (() => {
       sectionCallback(unreadSection);
       try {
         const { host, token } = await this.creds();
-        const raw = await this.getCachedMangas(host);
-        onDeckSection.items = raw.filter((m) => m.readingStatus && m.readingStatus.readChapters > 0 && !m.readingStatus.isFullyRead).slice(0, 20).map(
-          (m) => App.createPartialSourceManga({
-            mangaId: String(m.id),
-            title: m.title ?? "Sin t\xEDtulo",
-            image: getCoverUrl(m.metadata, host, token),
-            subtitle: `${m.readingStatus.readChapters}/${m.readingStatus.totalChapters} le\xEDdos`
-          })
-        );
-        sectionCallback(onDeckSection);
-        recentSection.items = [...raw].sort((a, b) => b.id - a.id).slice(0, 20).map(
-          (m) => App.createPartialSourceManga({
-            mangaId: String(m.id),
-            title: m.title ?? "Sin t\xEDtulo",
-            image: getCoverUrl(m.metadata, host, token)
-          })
-        );
-        sectionCallback(recentSection);
-        unreadSection.items = raw.filter((m) => m.readingStatus && m.readingStatus.unreadChapters > 0).slice(0, 20).map(
-          (m) => App.createPartialSourceManga({
-            mangaId: String(m.id),
-            title: m.title ?? "Sin t\xEDtulo",
-            image: getCoverUrl(m.metadata, host, token),
-            subtitle: `${m.readingStatus.unreadChapters} sin leer`
-          })
-        );
-        sectionCallback(unreadSection);
-        const libraryMap = /* @__PURE__ */ new Map();
-        for (const m of raw) {
-          const libName = m.library?.name?.trim() || "Library";
-          if (!libraryMap.has(libName)) {
-            libraryMap.set(libName, []);
-          }
-          libraryMap.get(libName).push(m);
-        }
-        for (const [libName, libMangas] of libraryMap.entries()) {
-          const libId = `lib_${libName.toLowerCase().replace(/[^a-z0-9]+/g, "_")}`;
-          const libSection = App.createHomeSection({
-            id: libId,
-            title: libName,
-            containsMoreItems: true,
-            type: import_types.HomeSectionType.singleRowNormal,
-            items: []
-          });
-          sectionCallback(libSection);
-          libSection.items = libMangas.slice(0, 20).map(
-            (m) => App.createPartialSourceManga({
-              mangaId: String(m.id),
-              title: m.title ?? "Sin t\xEDtulo",
-              image: getCoverUrl(m.metadata, host, token)
-            })
-          );
-          sectionCallback(libSection);
-        }
+        const raw = await this.apiFetch(`${host}/api/v1/mangas`);
+        const now = Date.now();
+        this._mangasCache = { data: raw, timestamp: now };
+        await this.stateManager.store("mangas_cache", JSON.stringify(raw));
+        await this.stateManager.store("mangas_cache_time", String(now));
+        this.renderSections(sectionCallback, raw, host, token);
       } catch (err) {
         onDeckSection.items = [];
         sectionCallback(onDeckSection);
@@ -1118,6 +1091,77 @@ var _Sources = (() => {
           })
         ];
         sectionCallback(setupSection);
+      }
+    }
+    renderSections(sectionCallback, raw, host, token) {
+      const onDeckSection = App.createHomeSection({
+        id: "on_deck",
+        title: "En Curso (On Deck)",
+        containsMoreItems: true,
+        type: import_types.HomeSectionType.singleRowNormal,
+        items: raw.filter((m) => m.readingStatus && m.readingStatus.readChapters > 0 && !m.readingStatus.isFullyRead).slice(0, 20).map(
+          (m) => App.createPartialSourceManga({
+            mangaId: String(m.id),
+            title: m.title ?? "Sin t\xEDtulo",
+            image: getCoverUrl(m.metadata, host, token),
+            subtitle: `${m.readingStatus.readChapters}/${m.readingStatus.totalChapters} le\xEDdos`
+          })
+        )
+      });
+      sectionCallback(onDeckSection);
+      const recentSection = App.createHomeSection({
+        id: "recent",
+        title: "Recientemente A\xF1adidos",
+        containsMoreItems: true,
+        type: import_types.HomeSectionType.singleRowNormal,
+        items: [...raw].sort((a, b) => b.id - a.id).slice(0, 20).map(
+          (m) => App.createPartialSourceManga({
+            mangaId: String(m.id),
+            title: m.title ?? "Sin t\xEDtulo",
+            image: getCoverUrl(m.metadata, host, token)
+          })
+        )
+      });
+      sectionCallback(recentSection);
+      const unreadSection = App.createHomeSection({
+        id: "unread",
+        title: "Cap\xEDtulos Sin Leer",
+        containsMoreItems: true,
+        type: import_types.HomeSectionType.singleRowNormal,
+        items: raw.filter((m) => m.readingStatus && m.readingStatus.unreadChapters > 0).slice(0, 20).map(
+          (m) => App.createPartialSourceManga({
+            mangaId: String(m.id),
+            title: m.title ?? "Sin t\xEDtulo",
+            image: getCoverUrl(m.metadata, host, token),
+            subtitle: `${m.readingStatus.unreadChapters} sin leer`
+          })
+        )
+      });
+      sectionCallback(unreadSection);
+      const libraryMap = /* @__PURE__ */ new Map();
+      for (const m of raw) {
+        const libName = m.library?.name?.trim() || "Library";
+        if (!libraryMap.has(libName)) {
+          libraryMap.set(libName, []);
+        }
+        libraryMap.get(libName).push(m);
+      }
+      for (const [libName, libMangas] of libraryMap.entries()) {
+        const libId = `lib_${libName.toLowerCase().replace(/[^a-z0-9]+/g, "_")}`;
+        const libSection = App.createHomeSection({
+          id: libId,
+          title: libName,
+          containsMoreItems: true,
+          type: import_types.HomeSectionType.singleRowNormal,
+          items: libMangas.slice(0, 20).map(
+            (m) => App.createPartialSourceManga({
+              mangaId: String(m.id),
+              title: m.title ?? "Sin t\xEDtulo",
+              image: getCoverUrl(m.metadata, host, token)
+            })
+          )
+        });
+        sectionCallback(libSection);
       }
     }
     async getViewMoreItems(homepageSectionId, _metadata) {
