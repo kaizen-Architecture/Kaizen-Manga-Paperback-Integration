@@ -749,27 +749,43 @@ export class KaizenManga extends Source implements MangaProgressProviding {
       const chapterReadActions = await actionQueue.queuedChapterReadActions()
       const { host } = await this.creds()
 
-      for (const readAction of chapterReadActions) {
-        try {
-          const mangaId = parseInt(readAction.sourceMangaId)
-          const chapterId = parseInt(readAction.sourceChapterId)
-          if (isNaN(mangaId) || isNaN(chapterId)) {
-            await actionQueue.discardChapterReadAction(readAction)
-            continue
-          }
+      // Group actions by mangaId to avoid N*2 network requests
+      const actionsByManga = new Map<number, { chapterId: number, readAction: any }[]>()
 
-          const body = {
-            chapters: [
-              {
-                id: chapterId,
-                isRead: true,
-              },
-            ],
-          }
-          await this.apiFetch(`${host}/api/v1/mangas/${mangaId}`, 'PATCH', body)
+      for (const readAction of chapterReadActions) {
+        const mangaId = parseInt(readAction.sourceMangaId)
+        const chapterId = parseInt(readAction.sourceChapterId)
+        if (isNaN(mangaId) || isNaN(chapterId)) {
           await actionQueue.discardChapterReadAction(readAction)
+          continue
+        }
+
+        if (!actionsByManga.has(mangaId)) {
+          actionsByManga.set(mangaId, [])
+        }
+        actionsByManga.get(mangaId)!.push({ chapterId, readAction })
+      }
+
+      for (const [mangaId, actions] of actionsByManga.entries()) {
+        const chaptersPayload = actions.map(a => ({
+          id: a.chapterId,
+          isRead: true,
+          lastReadPage: 9999, // Force Kaizen reader progress to the end
+        }))
+
+        try {
+          const body = { chapters: chaptersPayload }
+          await this.apiFetch(`${host}/api/v1/mangas/${mangaId}`, 'PATCH', body)
+
+          // Discard all queued actions for this manga if the PATCH was successful
+          for (const { readAction } of actions) {
+            await actionQueue.discardChapterReadAction(readAction)
+          }
         } catch (err) {
-          await actionQueue.retryChapterReadAction(readAction)
+          // Retry all on failure
+          for (const { readAction } of actions) {
+            await actionQueue.retryChapterReadAction(readAction)
+          }
         }
       }
     } catch (err) {
