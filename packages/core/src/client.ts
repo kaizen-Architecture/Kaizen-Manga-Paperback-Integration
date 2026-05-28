@@ -153,19 +153,23 @@ export class KaizenClient {
     token: string,
     mangaId: number,
     chapterId: number,
-    isRead: boolean
+    isRead: boolean,
+    lastReadPage?: number
   ): Promise<boolean> {
     const url = `${this.cleanHost(host)}/api/v1/mangas/${mangaId}`;
+    const payload: any = {
+      id: chapterId,
+      isRead: isRead,
+    };
+    if (lastReadPage !== undefined) {
+      payload.lastReadPage = lastReadPage;
+    }
+
     const response = await this.fetcher(url, {
       method: 'PATCH',
       headers: this.getHeaders(token),
       body: JSON.stringify({
-        chapters: [
-          {
-            id: chapterId,
-            isRead: isRead,
-          },
-        ],
+        chapters: [payload],
       }),
     });
 
