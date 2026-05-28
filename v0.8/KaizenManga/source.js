@@ -1339,26 +1339,36 @@ var _Sources = (() => {
       try {
         const chapterReadActions = await actionQueue.queuedChapterReadActions();
         const { host } = await this.creds();
+        const actionsByManga = /* @__PURE__ */ new Map();
         for (const readAction of chapterReadActions) {
-          try {
-            const mangaId = parseInt(readAction.sourceMangaId);
-            const chapterId = parseInt(readAction.sourceChapterId);
-            if (isNaN(mangaId) || isNaN(chapterId)) {
-              await actionQueue.discardChapterReadAction(readAction);
-              continue;
-            }
-            const body = {
-              chapters: [
-                {
-                  id: chapterId,
-                  isRead: true
-                }
-              ]
-            };
-            await this.apiFetch(`${host}/api/v1/mangas/${mangaId}`, "PATCH", body);
+          const mangaId = parseInt(readAction.sourceMangaId);
+          const chapterId = parseInt(readAction.sourceChapterId);
+          if (isNaN(mangaId) || isNaN(chapterId)) {
             await actionQueue.discardChapterReadAction(readAction);
+            continue;
+          }
+          if (!actionsByManga.has(mangaId)) {
+            actionsByManga.set(mangaId, []);
+          }
+          actionsByManga.get(mangaId).push({ chapterId, readAction });
+        }
+        for (const [mangaId, actions] of actionsByManga.entries()) {
+          const chaptersPayload = actions.map((a) => ({
+            id: a.chapterId,
+            isRead: true,
+            lastReadPage: 9999
+            // Force Kaizen reader progress to the end
+          }));
+          try {
+            const body = { chapters: chaptersPayload };
+            await this.apiFetch(`${host}/api/v1/mangas/${mangaId}`, "PATCH", body);
+            for (const { readAction } of actions) {
+              await actionQueue.discardChapterReadAction(readAction);
+            }
           } catch (err) {
-            await actionQueue.retryChapterReadAction(readAction);
+            for (const { readAction } of actions) {
+              await actionQueue.retryChapterReadAction(readAction);
+            }
           }
         }
       } catch (err) {
