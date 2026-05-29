@@ -729,7 +729,7 @@ var _Sources = (() => {
   });
   var import_types = __toESM(require_lib());
   var KaizenMangaInfo = {
-    version: "1.4.8",
+    version: "1.4.9",
     name: "Kaizen Manga",
     icon: "icon.png",
     author: "D4nj3s (DanielJNavas)",
@@ -1300,16 +1300,37 @@ var _Sources = (() => {
             const { host } = await this.creds();
             const raw = await this.apiFetch(`${host}/api/v1/mangas/${mangaId}`);
             const reading = raw.readingStatus ?? { readChapters: 0, totalChapters: 0 };
+            let tempVal = await this.stateManager.retrieve(`temp_progress_${mangaId}`);
+            if (tempVal === void 0 || tempVal === null || tempVal === "") {
+              tempVal = String(reading.readChapters);
+              await this.stateManager.store(`temp_progress_${mangaId}`, tempVal);
+            }
             return [
               App.createDUISection({
                 id: "info",
                 header: "Progreso de Lectura en Kaizen",
                 isHidden: false,
                 rows: async () => [
-                  App.createDUILabel({
-                    id: "progress",
+                  App.createDUIStepper({
+                    id: "progress_stepper",
                     label: "Cap\xEDtulos Le\xEDdos",
-                    value: `${reading.readChapters} / ${reading.totalChapters}`
+                    min: 0,
+                    max: reading.totalChapters,
+                    step: 1,
+                    value: App.createDUIBinding({
+                      get: async () => {
+                        const val = await this.stateManager.retrieve(`temp_progress_${mangaId}`);
+                        return val !== null && val !== void 0 && val !== "" ? Number(val) : reading.readChapters;
+                      },
+                      set: async (v) => {
+                        await this.stateManager.store(`temp_progress_${mangaId}`, String(v));
+                      }
+                    })
+                  }),
+                  App.createDUILabel({
+                    id: "total_chapters",
+                    label: "Cap\xEDtulos Totales",
+                    value: String(reading.totalChapters)
                   })
                 ]
               })
@@ -1332,6 +1353,30 @@ var _Sources = (() => {
           }
         },
         onSubmit: async () => {
+          try {
+            const { host } = await this.creds();
+            const tempValStr = await this.stateManager.retrieve(`temp_progress_${mangaId}`);
+            await this.stateManager.store(`temp_progress_${mangaId}`, "");
+            if (tempValStr === null || tempValStr === void 0 || tempValStr === "") {
+              return;
+            }
+            const newProgress = Number(tempValStr);
+            const raw = await this.apiFetch(`${host}/api/v1/mangas/${mangaId}`);
+            const sortedChapters = (raw.chapters ?? []).sort((a, b) => (a.index ?? 0) - (b.index ?? 0));
+            const chaptersPayload = sortedChapters.map((ch, idx) => ({
+              id: ch.id,
+              isRead: idx < newProgress,
+              lastReadPage: idx < newProgress ? 9999 : 0
+            }));
+            if (chaptersPayload.length > 0) {
+              const body = { chapters: chaptersPayload };
+              await this.apiFetch(`${host}/api/v1/mangas/${mangaId}`, "PATCH", body);
+            }
+            this._mangasCache = void 0;
+            await this.stateManager.store("mangas_cache", "");
+            await this.stateManager.store("mangas_cache_time", "");
+          } catch (err) {
+          }
         }
       });
     }
@@ -1365,6 +1410,9 @@ var _Sources = (() => {
             for (const { readAction } of actions) {
               await actionQueue.discardChapterReadAction(readAction);
             }
+            this._mangasCache = void 0;
+            await this.stateManager.store("mangas_cache", "");
+            await this.stateManager.store("mangas_cache_time", "");
           } catch (err) {
             for (const { readAction } of actions) {
               await actionQueue.retryChapterReadAction(readAction);
