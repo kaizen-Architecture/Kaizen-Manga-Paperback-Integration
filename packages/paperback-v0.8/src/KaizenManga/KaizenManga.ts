@@ -39,7 +39,7 @@ declare const App: any
 // This object is evaluated in Node by the toolchain to generate versioning.json.
 // It must be plain data — no runtime globals.
 export const KaizenMangaInfo: SourceInfo = {
-  version: '1.5.0',
+  version: '1.5.1',
   name: 'Kaizen Manga',
   icon: 'icon.png',
   author: 'D4nj3s (DanielJNavas)',
@@ -672,6 +672,16 @@ export class KaizenManga extends Source implements MangaProgressProviding {
               await this.stateManager.store('status', `Error: ${err.message || String(err)}`)
             }
           }
+        }),
+        App.createDUIButton({
+          id: 'sync_cache',
+          label: 'Sincronizar y Limpiar Caché',
+          onTap: async () => {
+            this._mangasCache = undefined
+            await this.stateManager.store('mangas_cache', '')
+            await this.stateManager.store('mangas_cache_time', '')
+            await this.stateManager.store('status', 'Caché limpiada. Vuelve a la Biblioteca para refrescar.')
+          }
         })
       ],
     })
@@ -748,12 +758,12 @@ export class KaizenManga extends Source implements MangaProgressProviding {
             }),
             App.createDUISection({
               id: 'actions',
-              header: 'Acciones Rápidas (Servidor)',
+              header: 'Sincronizar con Kaizen',
               isHidden: false,
               rows: async () => [
                 App.createDUIButton({
                   id: 'mark_all_read_btn',
-                  label: 'Marcar TODO como Leído',
+                  label: 'Sincronizar todo como Leído',
                   onTap: async () => {
                     try {
                       const { host } = await this.creds()
@@ -771,7 +781,7 @@ export class KaizenManga extends Source implements MangaProgressProviding {
                 }),
                 App.createDUIButton({
                   id: 'mark_all_unread_btn',
-                  label: 'Marcar TODO como No Leído',
+                  label: 'Sincronizar todo como No Leído',
                   onTap: async () => {
                     try {
                       const { host } = await this.creds()
