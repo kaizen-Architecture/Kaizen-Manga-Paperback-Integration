@@ -19,6 +19,8 @@ import {
   DUISection,
   DUINavigationButton,
   DUIButton,
+  DUILabel,
+  DUIStepper,
   MangaProgressProviding,
   MangaProgress,
   TrackerActionQueue,
@@ -37,7 +39,7 @@ declare const App: any
 // This object is evaluated in Node by the toolchain to generate versioning.json.
 // It must be plain data — no runtime globals.
 export const KaizenMangaInfo: SourceInfo = {
-  version: '1.4.8',
+  version: '1.4.9',
   name: 'Kaizen Manga',
   icon: 'icon.png',
   author: 'D4nj3s (DanielJNavas)',
@@ -707,16 +709,40 @@ export class KaizenManga extends Source implements MangaProgressProviding {
           const { host } = await this.creds()
           const raw = await this.apiFetch(`${host}/api/v1/mangas/${mangaId}`)
           const reading = raw.readingStatus ?? { readChapters: 0, totalChapters: 0 }
+
+          // Initialize the temporary progress state with the current value if not already set
+          let tempVal = await this.stateManager.retrieve(`temp_progress_${mangaId}`)
+          if (tempVal === undefined || tempVal === null || tempVal === '') {
+            tempVal = String(reading.readChapters)
+            await this.stateManager.store(`temp_progress_${mangaId}`, tempVal)
+          }
+
           return [
             App.createDUISection({
               id: 'info',
               header: 'Progreso de Lectura en Kaizen',
               isHidden: false,
               rows: async () => [
-                App.createDUILabel({
-                  id: 'progress',
+                App.createDUIStepper({
+                  id: 'progress_stepper',
                   label: 'Capítulos Leídos',
-                  value: `${reading.readChapters} / ${reading.totalChapters}`,
+                  min: 0,
+                  max: reading.totalChapters,
+                  step: 1,
+                  value: App.createDUIBinding({
+                    get: async () => {
+                      const val = await this.stateManager.retrieve(`temp_progress_${mangaId}`)
+                      return val !== null && val !== undefined && val !== '' ? Number(val) : reading.readChapters
+                    },
+                    set: async (v: number) => {
+                      await this.stateManager.store(`temp_progress_${mangaId}`, String(v))
+                    },
+                  }),
+                }),
+                App.createDUILabel({
+                  id: 'total_chapters',
+                  label: 'Capítulos Totales',
+                  value: String(reading.totalChapters),
                 }),
               ],
             }),
@@ -739,7 +765,41 @@ export class KaizenManga extends Source implements MangaProgressProviding {
         }
       },
       onSubmit: async () => {
-        // No values to submit/edit directly on progress form
+        try {
+          const { host } = await this.creds()
+          const tempValStr = await this.stateManager.retrieve(`temp_progress_${mangaId}`)
+          // Clean up the temp progress state immediately
+          await this.stateManager.store(`temp_progress_${mangaId}`, '')
+
+          if (tempValStr === null || tempValStr === undefined || tempValStr === '') {
+            return
+          }
+
+          const newProgress = Number(tempValStr)
+
+          // Fetch the manga details to get the chapters list
+          const raw = await this.apiFetch(`${host}/api/v1/mangas/${mangaId}`)
+          const sortedChapters = (raw.chapters ?? []).sort((a: any, b: any) => (a.index ?? 0) - (b.index ?? 0))
+
+          // Map chapters to their new read status
+          const chaptersPayload = sortedChapters.map((ch: any, idx: number) => ({
+            id: ch.id,
+            isRead: idx < newProgress,
+            lastReadPage: idx < newProgress ? 9999 : 0,
+          }))
+
+          if (chaptersPayload.length > 0) {
+            const body = { chapters: chaptersPayload }
+            await this.apiFetch(`${host}/api/v1/mangas/${mangaId}`, 'PATCH', body)
+          }
+
+          // Clear cache on success to force re-fetch on the homepage/search
+          this._mangasCache = undefined
+          await this.stateManager.store('mangas_cache', '')
+          await this.stateManager.store('mangas_cache_time', '')
+        } catch (err) {
+          // Silent catch to prevent crashes in Paperback UI
+        }
       },
     })
   }
@@ -781,6 +841,11 @@ export class KaizenManga extends Source implements MangaProgressProviding {
           for (const { readAction } of actions) {
             await actionQueue.discardChapterReadAction(readAction)
           }
+
+          // Clear cache on success to force re-fetch
+          this._mangasCache = undefined
+          await this.stateManager.store('mangas_cache', '')
+          await this.stateManager.store('mangas_cache_time', '')
         } catch (err) {
           // Retry all on failure
           for (const { readAction } of actions) {
