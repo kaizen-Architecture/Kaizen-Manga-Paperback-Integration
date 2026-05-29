@@ -729,7 +729,7 @@ var _Sources = (() => {
   });
   var import_types = __toESM(require_lib());
   var KaizenMangaInfo = {
-    version: "1.5.0",
+    version: "1.5.1",
     name: "Kaizen Manga",
     icon: "icon.png",
     author: "D4nj3s (DanielJNavas)",
@@ -1267,6 +1267,16 @@ var _Sources = (() => {
                 await this.stateManager.store("status", `Error: ${err.message || String(err)}`);
               }
             }
+          }),
+          App.createDUIButton({
+            id: "sync_cache",
+            label: "Sincronizar y Limpiar Cach\xE9",
+            onTap: async () => {
+              this._mangasCache = void 0;
+              await this.stateManager.store("mangas_cache", "");
+              await this.stateManager.store("mangas_cache_time", "");
+              await this.stateManager.store("status", "Cach\xE9 limpiada. Vuelve a la Biblioteca para refrescar.");
+            }
           })
         ]
       });
@@ -1336,12 +1346,12 @@ var _Sources = (() => {
               }),
               App.createDUISection({
                 id: "actions",
-                header: "Acciones R\xE1pidas (Servidor)",
+                header: "Sincronizar con Kaizen",
                 isHidden: false,
                 rows: async () => [
                   App.createDUIButton({
                     id: "mark_all_read_btn",
-                    label: "Marcar TODO como Le\xEDdo",
+                    label: "Sincronizar todo como Le\xEDdo",
                     onTap: async () => {
                       try {
                         const { host: host2 } = await this.creds();
@@ -1356,7 +1366,7 @@ var _Sources = (() => {
                   }),
                   App.createDUIButton({
                     id: "mark_all_unread_btn",
-                    label: "Marcar TODO como No Le\xEDdo",
+                    label: "Sincronizar todo como No Le\xEDdo",
                     onTap: async () => {
                       try {
                         const { host: host2 } = await this.creds();
