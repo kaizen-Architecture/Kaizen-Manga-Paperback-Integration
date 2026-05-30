@@ -39,7 +39,7 @@ declare const App: any
 // This object is evaluated in Node by the toolchain to generate versioning.json.
 // It must be plain data — no runtime globals.
 export const KaizenMangaInfo: SourceInfo = {
-  version: '1.5.1',
+  version: '1.5.2',
   name: 'Kaizen Manga',
   icon: 'icon.png',
   author: 'D4nj3s (DanielJNavas)',
@@ -753,49 +753,6 @@ export class KaizenManga extends Source implements MangaProgressProviding {
                   id: 'total_chapters',
                   label: 'Capítulos Totales',
                   value: String(reading.totalChapters),
-                }),
-              ],
-            }),
-            App.createDUISection({
-              id: 'actions',
-              header: 'Sincronizar con Kaizen',
-              isHidden: false,
-              rows: async () => [
-                App.createDUIButton({
-                  id: 'mark_all_read_btn',
-                  label: 'Sincronizar todo como Leído',
-                  onTap: async () => {
-                    try {
-                      const { host } = await this.creds()
-                      await this.apiFetch(`${host}/api/v1/mangas/${mangaId}`, 'PATCH', { isRead: true })
-                      await this.stateManager.store(`temp_progress_${mangaId}`, String(reading.totalChapters))
-                      
-                      // Clear cache on success to force re-fetch
-                      this._mangasCache = undefined
-                      await this.stateManager.store('mangas_cache', '')
-                      await this.stateManager.store('mangas_cache_time', '')
-                    } catch (err) {
-                      // Silent catch
-                    }
-                  },
-                }),
-                App.createDUIButton({
-                  id: 'mark_all_unread_btn',
-                  label: 'Sincronizar todo como No Leído',
-                  onTap: async () => {
-                    try {
-                      const { host } = await this.creds()
-                      await this.apiFetch(`${host}/api/v1/mangas/${mangaId}`, 'PATCH', { isRead: false })
-                      await this.stateManager.store(`temp_progress_${mangaId}`, '0')
-                      
-                      // Clear cache on success to force re-fetch
-                      this._mangasCache = undefined
-                      await this.stateManager.store('mangas_cache', '')
-                      await this.stateManager.store('mangas_cache_time', '')
-                    } catch (err) {
-                      // Silent catch
-                    }
-                  },
                 }),
               ],
             }),
