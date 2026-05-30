@@ -729,7 +729,7 @@ var _Sources = (() => {
   });
   var import_types = __toESM(require_lib());
   var KaizenMangaInfo = {
-    version: "1.5.1",
+    version: "1.5.2",
     name: "Kaizen Manga",
     icon: "icon.png",
     author: "D4nj3s (DanielJNavas)",
@@ -1341,43 +1341,6 @@ var _Sources = (() => {
                     id: "total_chapters",
                     label: "Cap\xEDtulos Totales",
                     value: String(reading.totalChapters)
-                  })
-                ]
-              }),
-              App.createDUISection({
-                id: "actions",
-                header: "Sincronizar con Kaizen",
-                isHidden: false,
-                rows: async () => [
-                  App.createDUIButton({
-                    id: "mark_all_read_btn",
-                    label: "Sincronizar todo como Le\xEDdo",
-                    onTap: async () => {
-                      try {
-                        const { host: host2 } = await this.creds();
-                        await this.apiFetch(`${host2}/api/v1/mangas/${mangaId}`, "PATCH", { isRead: true });
-                        await this.stateManager.store(`temp_progress_${mangaId}`, String(reading.totalChapters));
-                        this._mangasCache = void 0;
-                        await this.stateManager.store("mangas_cache", "");
-                        await this.stateManager.store("mangas_cache_time", "");
-                      } catch (err) {
-                      }
-                    }
-                  }),
-                  App.createDUIButton({
-                    id: "mark_all_unread_btn",
-                    label: "Sincronizar todo como No Le\xEDdo",
-                    onTap: async () => {
-                      try {
-                        const { host: host2 } = await this.creds();
-                        await this.apiFetch(`${host2}/api/v1/mangas/${mangaId}`, "PATCH", { isRead: false });
-                        await this.stateManager.store(`temp_progress_${mangaId}`, "0");
-                        this._mangasCache = void 0;
-                        await this.stateManager.store("mangas_cache", "");
-                        await this.stateManager.store("mangas_cache_time", "");
-                      } catch (err) {
-                      }
-                    }
                   })
                 ]
               })
