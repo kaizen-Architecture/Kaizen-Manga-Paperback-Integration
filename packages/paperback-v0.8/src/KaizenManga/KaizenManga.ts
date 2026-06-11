@@ -75,6 +75,7 @@ const DICTIONARIES: Record<string, Record<string, string>> = {
     completed: 'Completed',
     error_manga_details: 'Error getting manga details: ',
     chapter: 'Chapter',
+    chapter_short: 'ch',
     error_chapters: 'Error getting chapters: ',
     error_404: 'Error 404: Is your Kaizen Manga server updated to v1.12+ and does the .cbz file exist?',
     error_chapter_details: 'Error getting chapter details: ',
@@ -118,6 +119,7 @@ const DICTIONARIES: Record<string, Record<string, string>> = {
     completed: 'Completed',
     error_manga_details: 'Error obteniendo detalles del manga: ',
     chapter: 'Capítulo',
+    chapter_short: 'cap',
     error_chapters: 'Error obteniendo capítulos: ',
     error_404: 'Error 404: ¿Tu servidor Kaizen Manga está actualizado a v1.12+ y el archivo .cbz existe?',
     error_chapter_details: 'Error obteniendo detalles del capítulo: ',
@@ -434,7 +436,7 @@ export class KaizenManga extends Source implements MangaProgressProviding {
         )
       }
 
-      const chapterLabel = await this.t('chapter')
+      const chapterShortLabel = await this.t('chapter_short')
       const untitledLabel = await this.t('untitled')
 
       return App.createPagedResults({
@@ -444,7 +446,7 @@ export class KaizenManga extends Source implements MangaProgressProviding {
             title: m.title ?? untitledLabel,
             image: getCoverUrl(m.metadata, host, token),
             subtitle: m.readingStatus
-              ? `${m.readingStatus.readChapters}/${m.readingStatus.totalChapters} ${chapterLabel}.`
+              ? `${m.readingStatus.readChapters}/${m.readingStatus.totalChapters} ${chapterShortLabel}.`
               : undefined,
           })
         ),
