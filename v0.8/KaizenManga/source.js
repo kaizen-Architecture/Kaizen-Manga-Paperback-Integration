@@ -734,7 +734,7 @@ var _Sources = (() => {
     icon: "icon.png",
     author: "D4nj3s (DanielJNavas)",
     authorWebsite: "https://github.com/d4nj3s",
-    description: "Accede a tu biblioteca local de Kaizen Manga Downloader directamente desde Paperback.",
+    description: "Access your local Kaizen Manga Downloader library directly from Paperback. / Accede a tu biblioteca local de Kaizen Manga Downloader directamente desde Paperback.",
     contentRating: import_types.ContentRating.EVERYONE,
     websiteBaseURL: "http://localhost:3333",
     sourceTags: [
@@ -744,6 +744,96 @@ var _Sources = (() => {
       }
     ],
     intents: import_types.SourceIntents.MANGA_CHAPTERS | import_types.SourceIntents.HOMEPAGE_SECTIONS | import_types.SourceIntents.SETTINGS_UI | import_types.SourceIntents.MANGA_TRACKING
+  };
+  var DICTIONARIES = {
+    en: {
+      host_unconfigured: "Host not configured",
+      setup_help_title: "How to configure Kaizen Manga",
+      setup_help_desc: 'To use this extension, go to Paperback "Settings" -> "Extensions" -> tap "Kaizen Manga" -> enter your server IP/Host (e.g. http://192.168.1.50:3333) and your Kaizen API Token.',
+      untitled: "Untitled",
+      unknown_author: "Unknown",
+      no_description: "No description.",
+      ongoing: "Ongoing",
+      completed: "Completed",
+      error_manga_details: "Error getting manga details: ",
+      chapter: "Chapter",
+      chapter_short: "ch",
+      error_chapters: "Error getting chapters: ",
+      error_404: "Error 404: Is your Kaizen Manga server updated to v1.12+ and does the .cbz file exist?",
+      error_chapter_details: "Error getting chapter details: ",
+      read: "read",
+      unread_chapters: "unread",
+      on_deck: "On Deck",
+      recently_added: "Recently Added",
+      unread: "Unread Chapters",
+      setup_required: "Setup Required",
+      setup_tap: "Tap here to see how to configure the extension",
+      settings_header: "Kaizen Downloader Configuration",
+      host_label: "Server Host",
+      token_label: "API Token",
+      status_label: "Status",
+      test_connection: "Test Connection",
+      test_success: "Success!",
+      test_error_empty_host: "Error: Empty Host",
+      test_testing: "Testing connection...",
+      test_error_http: "HTTP Error:",
+      test_error_json: "Error: Invalid JSON",
+      test_error: "Error:",
+      sync_cache: "Sync & Clear Cache",
+      cache_cleared: "Cache cleared. Return to Library to refresh.",
+      unverified: "Unverified",
+      progress_header: "Reading Progress in Kaizen",
+      progress_read: "Read Chapters",
+      progress_total: "Total Chapters",
+      progress_error: "Could not connect to the server",
+      language_label: "Language / Idioma",
+      genres: "Genres",
+      mangas: "mangas"
+    },
+    es: {
+      host_unconfigured: "Host no configurado",
+      setup_help_title: "C\xF3mo configurar Kaizen Manga",
+      setup_help_desc: 'Para usar esta extensi\xF3n, ve a la pesta\xF1a "Ajustes" de Paperback -> "Extensiones" -> toca "Kaizen Manga" -> introduce la direcci\xF3n IP/Host de tu servidor (ej. http://192.168.1.50:3333) y tu API Token de Kaizen.',
+      untitled: "Sin t\xEDtulo",
+      unknown_author: "Desconocido",
+      no_description: "Sin descripci\xF3n.",
+      ongoing: "Ongoing",
+      completed: "Completed",
+      error_manga_details: "Error obteniendo detalles del manga: ",
+      chapter: "Cap\xEDtulo",
+      chapter_short: "cap",
+      error_chapters: "Error obteniendo cap\xEDtulos: ",
+      error_404: "Error 404: \xBFTu servidor Kaizen Manga est\xE1 actualizado a v1.12+ y el archivo .cbz existe?",
+      error_chapter_details: "Error obteniendo detalles del cap\xEDtulo: ",
+      read: "le\xEDdos",
+      unread_chapters: "sin leer",
+      on_deck: "En Curso (On Deck)",
+      recently_added: "Recientemente A\xF1adidos",
+      unread: "Cap\xEDtulos Sin Leer",
+      setup_required: "Configuraci\xF3n Requerida",
+      setup_tap: "Toca aqu\xED para ver c\xF3mo configurar la extensi\xF3n",
+      settings_header: "Configuraci\xF3n de Kaizen Downloader",
+      host_label: "Host del Servidor",
+      token_label: "API Token",
+      status_label: "Resultado",
+      test_connection: "Probar Conexi\xF3n",
+      test_success: "\xA1\xC9xito!",
+      test_error_empty_host: "Error: Host vac\xEDo",
+      test_testing: "Probando conexi\xF3n...",
+      test_error_http: "Error HTTP:",
+      test_error_json: "Error: JSON inv\xE1lido",
+      test_error: "Error:",
+      sync_cache: "Sincronizar y Limpiar Cach\xE9",
+      cache_cleared: "Cach\xE9 limpiada. Vuelve a la Biblioteca para refrescar.",
+      unverified: "Sin verificar",
+      progress_header: "Progreso de Lectura en Kaizen",
+      progress_read: "Cap\xEDtulos Le\xEDdos",
+      progress_total: "Cap\xEDtulos Totales",
+      progress_error: "No se pudo conectar con el servidor",
+      language_label: "Language / Idioma",
+      genres: "G\xE9neros",
+      mangas: "mangas"
+    }
   };
   function cleanHost(raw) {
     let h = (raw ?? "").trim().replace(/\/+$/, "");
@@ -847,12 +937,20 @@ var _Sources = (() => {
         return [];
       }
     }
+    async getLang() {
+      const lang = await this.stateManager.retrieve("language") ?? "es";
+      return DICTIONARIES[lang] ? lang : "es";
+    }
+    async t(key) {
+      const lang = await this.getLang();
+      return DICTIONARIES[lang]?.[key] ?? DICTIONARIES["en"]?.[key] ?? key;
+    }
     async creds() {
       const host = await this.stateManager.retrieve("host") ?? "";
       const token = await this.stateManager.retrieve("token") ?? "";
       const cleaned = cleanHost(host);
       if (!cleaned) {
-        throw new Error("Host no configurado");
+        throw new Error(await this.t("host_unconfigured"));
       }
       return { host: cleaned, token: token.trim() };
     }
@@ -890,10 +988,10 @@ var _Sources = (() => {
         return App.createSourceManga({
           id: "setup_help",
           mangaInfo: App.createMangaInfo({
-            titles: ["C\xF3mo configurar Kaizen Manga"],
+            titles: [await this.t("setup_help_title")],
             image: "",
             author: "D4nj3s (DanielJNavas)",
-            desc: 'Para usar esta extensi\xF3n, ve a la pesta\xF1a "Ajustes" de Paperback -> "Extensiones" -> toca "Kaizen Manga" -> introduce la direcci\xF3n IP/Host de tu servidor (ej. http://192.168.1.50:3333) y tu API Token de Kaizen.',
+            desc: await this.t("setup_help_desc"),
             status: "Completed"
           })
         });
@@ -904,21 +1002,21 @@ var _Sources = (() => {
         const tags = (raw.metadata?.genres ?? []).map(
           (g) => App.createTag({ id: g, label: g })
         );
-        const tagSections = tags.length ? [App.createTagSection({ id: "genres", label: "Genres", tags })] : [];
+        const tagSections = tags.length ? [App.createTagSection({ id: "genres", label: await this.t("genres"), tags })] : [];
         return App.createSourceManga({
           id: mangaId,
           mangaInfo: App.createMangaInfo({
-            titles: [raw.title ?? "Sin t\xEDtulo"],
+            titles: [raw.title ?? await this.t("untitled")],
             image: getCoverUrl(raw.metadata, host, token),
-            author: raw.metadata?.authors?.join(", ") || "Desconocido",
+            author: raw.metadata?.authors?.join(", ") || await this.t("unknown_author"),
             artist: "",
-            desc: raw.metadata?.summary || "Sin descripci\xF3n.",
+            desc: raw.metadata?.summary || await this.t("no_description"),
             tags: tagSections,
             status: raw.metadata?.status === "ONGOING" ? "Ongoing" : "Completed"
           })
         });
       } catch (e) {
-        throw new Error(`Error obteniendo detalles del manga: ${e.message}`);
+        throw new Error(`${await this.t("error_manga_details")}${e.message}`);
       }
     }
     // ─── getChapters ──────────────────────────────────────────────────────────
@@ -929,18 +1027,19 @@ var _Sources = (() => {
       try {
         const { host } = await this.creds();
         const raw = await this.apiFetch(`${host}/api/v1/mangas/${mangaId}`);
+        const chapterLabel = await this.t("chapter");
         return (raw.chapters ?? []).map(
           (ch) => App.createChapter({
             id: String(ch.id),
             mangaId,
             chapNum: ch.index ?? 0,
-            name: ch.name ?? `Cap\xEDtulo ${ch.index}`,
+            name: ch.name ?? `${chapterLabel} ${ch.index}`,
             langCode: "\u{1F1EC}\u{1F1E7}",
             time: ch.createdAt ? new Date(ch.createdAt) : void 0
           })
         );
       } catch (e) {
-        throw new Error(`Error obteniendo cap\xEDtulos: ${e.message}`);
+        throw new Error(`${await this.t("error_chapters")}${e.message}`);
       }
     }
     // ─── getChapterDetails ────────────────────────────────────────────────────
@@ -959,9 +1058,9 @@ var _Sources = (() => {
         return App.createChapterDetails({ id: chapterId, mangaId, pages });
       } catch (e) {
         if (e.message?.includes("404")) {
-          throw new Error("Error 404: \xBFTu servidor Kaizen Manga est\xE1 actualizado a v1.12+ y el archivo .cbz existe?");
+          throw new Error(await this.t("error_404"));
         }
-        throw new Error(`Error obteniendo detalles del cap\xEDtulo: ${e.message}`);
+        throw new Error(`${await this.t("error_chapter_details")}${e.message}`);
       }
     }
     // ─── getSearchResults ─────────────────────────────────────────────────────
@@ -980,13 +1079,15 @@ var _Sources = (() => {
             (m) => (m.metadata?.genres ?? []).some((g) => selectedTags.includes(g))
           );
         }
+        const chapterShortLabel = await this.t("chapter_short");
+        const untitledLabel = await this.t("untitled");
         return App.createPagedResults({
           results: results.map(
             (m) => App.createPartialSourceManga({
               mangaId: String(m.id),
-              title: m.title ?? "Sin t\xEDtulo",
+              title: m.title ?? untitledLabel,
               image: getCoverUrl(m.metadata, host, token),
-              subtitle: m.readingStatus ? `${m.readingStatus.readChapters}/${m.readingStatus.totalChapters} cap.` : void 0
+              subtitle: m.readingStatus ? `${m.readingStatus.readChapters}/${m.readingStatus.totalChapters} ${chapterShortLabel}.` : void 0
             })
           )
         });
@@ -1011,7 +1112,7 @@ var _Sources = (() => {
         return [
           App.createTagSection({
             id: "genres",
-            label: "Genres",
+            label: await this.t("genres"),
             tags
           })
         ];
@@ -1025,10 +1126,10 @@ var _Sources = (() => {
         const { host, token } = await this.creds();
         const cached = await this.getCachedMangasIfValid();
         if (cached && cached.length > 0) {
-          this.renderSections(sectionCallback, cached, host, token);
-          this.refreshMangasCacheInBackground(host).then((newData) => {
+          await this.renderSections(sectionCallback, cached, host, token);
+          this.refreshMangasCacheInBackground(host).then(async (newData) => {
             if (newData && newData.length > 0) {
-              this.renderSections(sectionCallback, newData, host, token);
+              await this.renderSections(sectionCallback, newData, host, token);
             }
           }).catch(() => {
           });
@@ -1038,7 +1139,7 @@ var _Sources = (() => {
       }
       const onDeckSection = App.createHomeSection({
         id: "on_deck",
-        title: "En Curso (On Deck)",
+        title: await this.t("on_deck"),
         containsMoreItems: true,
         type: import_types.HomeSectionType.singleRowNormal,
         items: []
@@ -1046,7 +1147,7 @@ var _Sources = (() => {
       sectionCallback(onDeckSection);
       const recentSection = App.createHomeSection({
         id: "recent",
-        title: "Recientemente A\xF1adidos",
+        title: await this.t("recently_added"),
         containsMoreItems: true,
         type: import_types.HomeSectionType.singleRowNormal,
         items: []
@@ -1054,7 +1155,7 @@ var _Sources = (() => {
       sectionCallback(recentSection);
       const unreadSection = App.createHomeSection({
         id: "unread",
-        title: "Cap\xEDtulos Sin Leer",
+        title: await this.t("unread"),
         containsMoreItems: true,
         type: import_types.HomeSectionType.singleRowNormal,
         items: []
@@ -1067,7 +1168,7 @@ var _Sources = (() => {
         this._mangasCache = { data: raw, timestamp: now };
         await this.stateManager.store("mangas_cache", JSON.stringify(raw));
         await this.stateManager.store("mangas_cache_time", String(now));
-        this.renderSections(sectionCallback, raw, host, token);
+        await this.renderSections(sectionCallback, raw, host, token);
       } catch (err) {
         onDeckSection.items = [];
         sectionCallback(onDeckSection);
@@ -1077,7 +1178,7 @@ var _Sources = (() => {
         sectionCallback(unreadSection);
         const setupSection = App.createHomeSection({
           id: "setup",
-          title: "Configuraci\xF3n Requerida",
+          title: await this.t("setup_required"),
           containsMoreItems: false,
           type: import_types.HomeSectionType.singleRowNormal,
           items: []
@@ -1086,38 +1187,41 @@ var _Sources = (() => {
         setupSection.items = [
           App.createPartialSourceManga({
             mangaId: "setup_help",
-            title: "Toca aqu\xED para ver c\xF3mo configurar la extensi\xF3n",
+            title: await this.t("setup_tap"),
             image: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"/>'
           })
         ];
         sectionCallback(setupSection);
       }
     }
-    renderSections(sectionCallback, raw, host, token) {
+    async renderSections(sectionCallback, raw, host, token) {
+      const untitledLabel = await this.t("untitled");
+      const readLabel = await this.t("read");
+      const unreadLabel = await this.t("unread_chapters");
       const onDeckSection = App.createHomeSection({
         id: "on_deck",
-        title: "En Curso (On Deck)",
+        title: await this.t("on_deck"),
         containsMoreItems: true,
         type: import_types.HomeSectionType.singleRowNormal,
         items: raw.filter((m) => m.readingStatus && m.readingStatus.readChapters > 0 && !m.readingStatus.isFullyRead).slice(0, 20).map(
           (m) => App.createPartialSourceManga({
             mangaId: String(m.id),
-            title: m.title ?? "Sin t\xEDtulo",
+            title: m.title ?? untitledLabel,
             image: getCoverUrl(m.metadata, host, token),
-            subtitle: `${m.readingStatus.readChapters}/${m.readingStatus.totalChapters} le\xEDdos`
+            subtitle: `${m.readingStatus.readChapters}/${m.readingStatus.totalChapters} ${readLabel}`
           })
         )
       });
       sectionCallback(onDeckSection);
       const recentSection = App.createHomeSection({
         id: "recent",
-        title: "Recientemente A\xF1adidos",
+        title: await this.t("recently_added"),
         containsMoreItems: true,
         type: import_types.HomeSectionType.singleRowNormal,
         items: [...raw].sort((a, b) => b.id - a.id).slice(0, 20).map(
           (m) => App.createPartialSourceManga({
             mangaId: String(m.id),
-            title: m.title ?? "Sin t\xEDtulo",
+            title: m.title ?? untitledLabel,
             image: getCoverUrl(m.metadata, host, token)
           })
         )
@@ -1125,15 +1229,15 @@ var _Sources = (() => {
       sectionCallback(recentSection);
       const unreadSection = App.createHomeSection({
         id: "unread",
-        title: "Cap\xEDtulos Sin Leer",
+        title: await this.t("unread"),
         containsMoreItems: true,
         type: import_types.HomeSectionType.singleRowNormal,
         items: raw.filter((m) => m.readingStatus && m.readingStatus.unreadChapters > 0).slice(0, 20).map(
           (m) => App.createPartialSourceManga({
             mangaId: String(m.id),
-            title: m.title ?? "Sin t\xEDtulo",
+            title: m.title ?? untitledLabel,
             image: getCoverUrl(m.metadata, host, token),
-            subtitle: `${m.readingStatus.unreadChapters} sin leer`
+            subtitle: `${m.readingStatus.unreadChapters} ${unreadLabel}`
           })
         )
       });
@@ -1156,7 +1260,7 @@ var _Sources = (() => {
           items: libMangas.slice(0, 20).map(
             (m) => App.createPartialSourceManga({
               mangaId: String(m.id),
-              title: m.title ?? "Sin t\xEDtulo",
+              title: m.title ?? untitledLabel,
               image: getCoverUrl(m.metadata, host, token)
             })
           )
@@ -1186,11 +1290,12 @@ var _Sources = (() => {
             return libId === homepageSectionId;
           });
         }
+        const untitledLabel = await this.t("untitled");
         return App.createPagedResults({
           results: results.map(
             (m) => App.createPartialSourceManga({
               mangaId: String(m.id),
-              title: m.title ?? "Sin t\xEDtulo",
+              title: m.title ?? untitledLabel,
               image: getCoverUrl(m.metadata, host, token)
             })
           )
@@ -1203,12 +1308,23 @@ var _Sources = (() => {
     async getSourceMenu() {
       return App.createDUISection({
         id: "settings",
-        header: "Configuraci\xF3n de Kaizen Downloader",
+        header: await this.t("settings_header"),
         isHidden: false,
         rows: async () => [
+          App.createDUISelect({
+            id: "language",
+            label: await this.t("language_label"),
+            options: ["en", "es"],
+            value: App.createDUIBinding({
+              get: async () => await this.stateManager.retrieve("language") ?? "es",
+              set: async (v) => this.stateManager.store("language", v)
+            }),
+            allowsMultiselect: false,
+            labelResolver: async (value) => value === "en" ? "English" : "Espa\xF1ol"
+          }),
           App.createDUIInputField({
             id: "host",
-            label: "Host del Servidor",
+            label: await this.t("host_label"),
             value: App.createDUIBinding({
               get: async () => await this.stateManager.retrieve("host") ?? "",
               set: async (v) => this.stateManager.store("host", v)
@@ -1216,7 +1332,7 @@ var _Sources = (() => {
           }),
           App.createDUISecureInputField({
             id: "token",
-            label: "API Token",
+            label: await this.t("token_label"),
             value: App.createDUIBinding({
               get: async () => await this.stateManager.retrieve("token") ?? "",
               set: async (v) => this.stateManager.store("token", v)
@@ -1224,25 +1340,25 @@ var _Sources = (() => {
           }),
           App.createDUIInputField({
             id: "status",
-            label: "Resultado",
+            label: await this.t("status_label"),
             value: App.createDUIBinding({
-              get: async () => await this.stateManager.retrieve("status") ?? "Sin verificar",
+              get: async () => await this.stateManager.retrieve("status") ?? await this.t("unverified"),
               set: async (v) => {
               }
             })
           }),
           App.createDUIButton({
             id: "test_connection",
-            label: "Probar Conexi\xF3n",
+            label: await this.t("test_connection"),
             onTap: async () => {
               const host = await this.stateManager.retrieve("host") ?? "";
               const token = await this.stateManager.retrieve("token") ?? "";
               const cleaned = cleanHost(host);
               if (!cleaned) {
-                await this.stateManager.store("status", "Error: Host vac\xEDo");
+                await this.stateManager.store("status", await this.t("test_error_empty_host"));
                 return;
               }
-              await this.stateManager.store("status", "Probando conexi\xF3n...");
+              await this.stateManager.store("status", await this.t("test_testing"));
               try {
                 const testRequest = App.createRequest({
                   url: `${cleaned}/api/v1/mangas`,
@@ -1254,28 +1370,28 @@ var _Sources = (() => {
                 });
                 const resp = await this.requestManager.schedule(testRequest, 1);
                 if (resp.status >= 400) {
-                  await this.stateManager.store("status", `Error HTTP: ${resp.status}`);
+                  await this.stateManager.store("status", `${await this.t("test_error_http")} ${resp.status}`);
                   return;
                 }
                 const data = JSON.parse(resp.data ?? "[]");
                 if (!Array.isArray(data)) {
-                  await this.stateManager.store("status", "Error: JSON inv\xE1lido");
+                  await this.stateManager.store("status", await this.t("test_error_json"));
                   return;
                 }
-                await this.stateManager.store("status", `\xA1\xC9xito! (${data.length} mangas)`);
+                await this.stateManager.store("status", `${await this.t("test_success")} (${data.length} ${await this.t("mangas")})`);
               } catch (err) {
-                await this.stateManager.store("status", `Error: ${err.message || String(err)}`);
+                await this.stateManager.store("status", `${await this.t("test_error")} ${err.message || String(err)}`);
               }
             }
           }),
           App.createDUIButton({
             id: "sync_cache",
-            label: "Sincronizar y Limpiar Cach\xE9",
+            label: await this.t("sync_cache"),
             onTap: async () => {
               this._mangasCache = void 0;
               await this.stateManager.store("mangas_cache", "");
               await this.stateManager.store("mangas_cache_time", "");
-              await this.stateManager.store("status", "Cach\xE9 limpiada. Vuelve a la Biblioteca para refrescar.");
+              await this.stateManager.store("status", await this.t("cache_cleared"));
             }
           })
         ]
@@ -1318,12 +1434,12 @@ var _Sources = (() => {
             return [
               App.createDUISection({
                 id: "info",
-                header: "Progreso de Lectura en Kaizen",
+                header: await this.t("progress_header"),
                 isHidden: false,
                 rows: async () => [
                   App.createDUIStepper({
                     id: "progress_stepper",
-                    label: "Cap\xEDtulos Le\xEDdos",
+                    label: await this.t("progress_read"),
                     min: 0,
                     max: reading.totalChapters,
                     step: 1,
@@ -1339,7 +1455,7 @@ var _Sources = (() => {
                   }),
                   App.createDUILabel({
                     id: "total_chapters",
-                    label: "Cap\xEDtulos Totales",
+                    label: await this.t("progress_total"),
                     value: String(reading.totalChapters)
                   })
                 ]
@@ -1354,7 +1470,7 @@ var _Sources = (() => {
                 rows: async () => [
                   App.createDUILabel({
                     id: "error_msg",
-                    label: "No se pudo conectar con el servidor",
+                    label: await this.t("progress_error"),
                     value: err.message || String(err)
                   })
                 ]
