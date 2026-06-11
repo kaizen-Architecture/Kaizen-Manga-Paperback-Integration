@@ -2,7 +2,7 @@ import { ContentRating } from '@paperback/types'
 
 export default {
   name: "Kaizen Manga (v0.9 WIP)",
-  description: "Conector WIP para Paperback v0.9. Usa el paquete v0.8 para tu instalación actual.",
+  description: "WIP Connector for Paperback v0.9. Use the v0.8 package for your current installation. / Conector WIP para Paperback v0.9. Usa el paquete v0.8 para tu instalación actual.",
   version: "1.0.0",
   icon: "icon.png",
   author: "D4nj3s (DanielJNavas)",

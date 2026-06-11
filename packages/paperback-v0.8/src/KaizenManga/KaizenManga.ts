@@ -21,6 +21,7 @@ import {
   DUIButton,
   DUILabel,
   DUIStepper,
+  DUISelect,
   MangaProgressProviding,
   MangaProgress,
   TrackerActionQueue,
@@ -45,7 +46,7 @@ export const KaizenMangaInfo: SourceInfo = {
   author: 'D4nj3s (DanielJNavas)',
   authorWebsite: 'https://github.com/d4nj3s',
   description:
-    'Accede a tu biblioteca local de Kaizen Manga Downloader directamente desde Paperback.',
+    'Access your local Kaizen Manga Downloader library directly from Paperback. / Accede a tu biblioteca local de Kaizen Manga Downloader directamente desde Paperback.',
   contentRating: ContentRating.EVERYONE,
   websiteBaseURL: 'http://localhost:3333',
   sourceTags: [
@@ -59,6 +60,96 @@ export const KaizenMangaInfo: SourceInfo = {
     SourceIntents.HOMEPAGE_SECTIONS |
     SourceIntents.SETTINGS_UI |
     SourceIntents.MANGA_TRACKING,
+}
+
+// ─── i18n Dictionaries ────────────────────────────────────────────────────────
+const DICTIONARIES: Record<string, Record<string, string>> = {
+  en: {
+    host_unconfigured: 'Host not configured',
+    setup_help_title: 'How to configure Kaizen Manga',
+    setup_help_desc: 'To use this extension, go to Paperback "Settings" -> "Extensions" -> tap "Kaizen Manga" -> enter your server IP/Host (e.g. http://192.168.1.50:3333) and your Kaizen API Token.',
+    untitled: 'Untitled',
+    unknown_author: 'Unknown',
+    no_description: 'No description.',
+    ongoing: 'Ongoing',
+    completed: 'Completed',
+    error_manga_details: 'Error getting manga details: ',
+    chapter: 'Chapter',
+    error_chapters: 'Error getting chapters: ',
+    error_404: 'Error 404: Is your Kaizen Manga server updated to v1.12+ and does the .cbz file exist?',
+    error_chapter_details: 'Error getting chapter details: ',
+    read: 'read',
+    unread_chapters: 'unread',
+    on_deck: 'On Deck',
+    recently_added: 'Recently Added',
+    unread: 'Unread Chapters',
+    setup_required: 'Setup Required',
+    setup_tap: 'Tap here to see how to configure the extension',
+    settings_header: 'Kaizen Downloader Configuration',
+    host_label: 'Server Host',
+    token_label: 'API Token',
+    status_label: 'Status',
+    test_connection: 'Test Connection',
+    test_success: 'Success!',
+    test_error_empty_host: 'Error: Empty Host',
+    test_testing: 'Testing connection...',
+    test_error_http: 'HTTP Error:',
+    test_error_json: 'Error: Invalid JSON',
+    test_error: 'Error:',
+    sync_cache: 'Sync & Clear Cache',
+    cache_cleared: 'Cache cleared. Return to Library to refresh.',
+    unverified: 'Unverified',
+    progress_header: 'Reading Progress in Kaizen',
+    progress_read: 'Read Chapters',
+    progress_total: 'Total Chapters',
+    progress_error: 'Could not connect to the server',
+    language_label: 'Language / Idioma',
+    genres: 'Genres',
+    mangas: 'mangas',
+  },
+  es: {
+    host_unconfigured: 'Host no configurado',
+    setup_help_title: 'Cómo configurar Kaizen Manga',
+    setup_help_desc: 'Para usar esta extensión, ve a la pestaña "Ajustes" de Paperback -> "Extensiones" -> toca "Kaizen Manga" -> introduce la dirección IP/Host de tu servidor (ej. http://192.168.1.50:3333) y tu API Token de Kaizen.',
+    untitled: 'Sin título',
+    unknown_author: 'Desconocido',
+    no_description: 'Sin descripción.',
+    ongoing: 'Ongoing',
+    completed: 'Completed',
+    error_manga_details: 'Error obteniendo detalles del manga: ',
+    chapter: 'Capítulo',
+    error_chapters: 'Error obteniendo capítulos: ',
+    error_404: 'Error 404: ¿Tu servidor Kaizen Manga está actualizado a v1.12+ y el archivo .cbz existe?',
+    error_chapter_details: 'Error obteniendo detalles del capítulo: ',
+    read: 'leídos',
+    unread_chapters: 'sin leer',
+    on_deck: 'En Curso (On Deck)',
+    recently_added: 'Recientemente Añadidos',
+    unread: 'Capítulos Sin Leer',
+    setup_required: 'Configuración Requerida',
+    setup_tap: 'Toca aquí para ver cómo configurar la extensión',
+    settings_header: 'Configuración de Kaizen Downloader',
+    host_label: 'Host del Servidor',
+    token_label: 'API Token',
+    status_label: 'Resultado',
+    test_connection: 'Probar Conexión',
+    test_success: '¡Éxito!',
+    test_error_empty_host: 'Error: Host vacío',
+    test_testing: 'Probando conexión...',
+    test_error_http: 'Error HTTP:',
+    test_error_json: 'Error: JSON inválido',
+    test_error: 'Error:',
+    sync_cache: 'Sincronizar y Limpiar Caché',
+    cache_cleared: 'Caché limpiada. Vuelve a la Biblioteca para refrescar.',
+    unverified: 'Sin verificar',
+    progress_header: 'Progreso de Lectura en Kaizen',
+    progress_read: 'Capítulos Leídos',
+    progress_total: 'Capítulos Totales',
+    progress_error: 'No se pudo conectar con el servidor',
+    language_label: 'Language / Idioma',
+    genres: 'Géneros',
+    mangas: 'mangas',
+  }
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -186,12 +277,22 @@ export class KaizenManga extends Source implements MangaProgressProviding {
     }
   }
 
+  private async getLang(): Promise<string> {
+    const lang = ((await this.stateManager.retrieve('language')) as string) ?? 'es'
+    return DICTIONARIES[lang] ? lang : 'es'
+  }
+
+  private async t(key: string): Promise<string> {
+    const lang = await this.getLang()
+    return DICTIONARIES[lang]?.[key] ?? DICTIONARIES['en']?.[key] ?? key
+  }
+
   private async creds(): Promise<{ host: string; token: string }> {
     const host = ((await this.stateManager.retrieve('host')) as string) ?? ''
     const token = ((await this.stateManager.retrieve('token')) as string) ?? ''
     const cleaned = cleanHost(host)
     if (!cleaned) {
-      throw new Error('Host no configurado')
+      throw new Error(await this.t('host_unconfigured'))
     }
     return { host: cleaned, token: token.trim() }
   }
@@ -230,10 +331,10 @@ export class KaizenManga extends Source implements MangaProgressProviding {
       return App.createSourceManga({
         id: 'setup_help',
         mangaInfo: App.createMangaInfo({
-          titles: ['Cómo configurar Kaizen Manga'],
+          titles: [await this.t('setup_help_title')],
           image: '',
           author: 'D4nj3s (DanielJNavas)',
-          desc: 'Para usar esta extensión, ve a la pestaña "Ajustes" de Paperback -> "Extensiones" -> toca "Kaizen Manga" -> introduce la dirección IP/Host de tu servidor (ej. http://192.168.1.50:3333) y tu API Token de Kaizen.',
+          desc: await this.t('setup_help_desc'),
           status: 'Completed',
         }),
       })
@@ -246,23 +347,23 @@ export class KaizenManga extends Source implements MangaProgressProviding {
         App.createTag({ id: g, label: g })
       )
       const tagSections: TagSection[] = tags.length
-        ? [App.createTagSection({ id: 'genres', label: 'Genres', tags })]
+        ? [App.createTagSection({ id: 'genres', label: await this.t('genres'), tags })]
         : []
 
       return App.createSourceManga({
         id: mangaId,
         mangaInfo: App.createMangaInfo({
-          titles: [raw.title ?? 'Sin título'],
+          titles: [raw.title ?? await this.t('untitled')],
           image: getCoverUrl(raw.metadata, host, token),
-          author: raw.metadata?.authors?.join(', ') || 'Desconocido',
+          author: raw.metadata?.authors?.join(', ') || await this.t('unknown_author'),
           artist: '',
-          desc: raw.metadata?.summary || 'Sin descripción.',
+          desc: raw.metadata?.summary || await this.t('no_description'),
           tags: tagSections,
           status: raw.metadata?.status === 'ONGOING' ? 'Ongoing' : 'Completed',
         }),
       })
     } catch (e: any) {
-      throw new Error(`Error obteniendo detalles del manga: ${e.message}`)
+      throw new Error(`${await this.t('error_manga_details')}${e.message}`)
     }
   }
 
@@ -274,18 +375,19 @@ export class KaizenManga extends Source implements MangaProgressProviding {
     try {
       const { host } = await this.creds()
       const raw = await this.apiFetch(`${host}/api/v1/mangas/${mangaId}`)
+      const chapterLabel = await this.t('chapter')
       return (raw.chapters ?? []).map((ch: any) =>
         App.createChapter({
           id: String(ch.id),
           mangaId,
           chapNum: ch.index ?? 0,
-          name: ch.name ?? `Capítulo ${ch.index}`,
+          name: ch.name ?? `${chapterLabel} ${ch.index}`,
           langCode: '🇬🇧',
           time: ch.createdAt ? new Date(ch.createdAt) : undefined,
         })
       )
     } catch (e: any) {
-      throw new Error(`Error obteniendo capítulos: ${e.message}`)
+      throw new Error(`${await this.t('error_chapters')}${e.message}`)
     }
   }
 
@@ -305,9 +407,9 @@ export class KaizenManga extends Source implements MangaProgressProviding {
       return App.createChapterDetails({ id: chapterId, mangaId, pages })
     } catch (e: any) {
       if (e.message?.includes('404')) {
-        throw new Error('Error 404: ¿Tu servidor Kaizen Manga está actualizado a v1.12+ y el archivo .cbz existe?')
+        throw new Error(await this.t('error_404'))
       }
-      throw new Error(`Error obteniendo detalles del capítulo: ${e.message}`)
+      throw new Error(`${await this.t('error_chapter_details')}${e.message}`)
     }
   }
 
@@ -332,14 +434,17 @@ export class KaizenManga extends Source implements MangaProgressProviding {
         )
       }
 
+      const chapterLabel = await this.t('chapter')
+      const untitledLabel = await this.t('untitled')
+
       return App.createPagedResults({
         results: results.map((m) =>
           App.createPartialSourceManga({
             mangaId: String(m.id),
-            title: m.title ?? 'Sin título',
+            title: m.title ?? untitledLabel,
             image: getCoverUrl(m.metadata, host, token),
             subtitle: m.readingStatus
-              ? `${m.readingStatus.readChapters}/${m.readingStatus.totalChapters} cap.`
+              ? `${m.readingStatus.readChapters}/${m.readingStatus.totalChapters} ${chapterLabel}.`
               : undefined,
           })
         ),
@@ -366,7 +471,7 @@ export class KaizenManga extends Source implements MangaProgressProviding {
       return [
         App.createTagSection({
           id: 'genres',
-          label: 'Genres',
+          label: await this.t('genres'),
           tags,
         })
       ]
@@ -387,12 +492,12 @@ export class KaizenManga extends Source implements MangaProgressProviding {
       
       if (cached && cached.length > 0) {
         // Render instantly using cached data (no flicker, no skeletons!)
-        this.renderSections(sectionCallback, cached, host, token)
+        await this.renderSections(sectionCallback, cached, host, token)
         
         // Trigger a background refresh to keep data updated
-        this.refreshMangasCacheInBackground(host).then((newData) => {
+        this.refreshMangasCacheInBackground(host).then(async (newData) => {
           if (newData && newData.length > 0) {
-            this.renderSections(sectionCallback, newData, host, token)
+            await this.renderSections(sectionCallback, newData, host, token)
           }
         }).catch(() => {})
         return
@@ -402,7 +507,7 @@ export class KaizenManga extends Source implements MangaProgressProviding {
     // Fallback: No cache available (first run). Render skeleton loaders, then fetch blocking.
     const onDeckSection: HomeSection = App.createHomeSection({
       id: 'on_deck',
-      title: 'En Curso (On Deck)',
+      title: await this.t('on_deck'),
       containsMoreItems: true,
       type: HomeSectionType.singleRowNormal,
       items: [],
@@ -411,7 +516,7 @@ export class KaizenManga extends Source implements MangaProgressProviding {
 
     const recentSection: HomeSection = App.createHomeSection({
       id: 'recent',
-      title: 'Recientemente Añadidos',
+      title: await this.t('recently_added'),
       containsMoreItems: true,
       type: HomeSectionType.singleRowNormal,
       items: [],
@@ -420,7 +525,7 @@ export class KaizenManga extends Source implements MangaProgressProviding {
 
     const unreadSection: HomeSection = App.createHomeSection({
       id: 'unread',
-      title: 'Capítulos Sin Leer',
+      title: await this.t('unread'),
       containsMoreItems: true,
       type: HomeSectionType.singleRowNormal,
       items: [],
@@ -438,7 +543,7 @@ export class KaizenManga extends Source implements MangaProgressProviding {
       await this.stateManager.store('mangas_cache_time', String(now))
 
       // Populate sections
-      this.renderSections(sectionCallback, raw, host, token)
+      await this.renderSections(sectionCallback, raw, host, token)
     } catch (err) {
       // Clear main sections if they failed
       onDeckSection.items = []
@@ -450,7 +555,7 @@ export class KaizenManga extends Source implements MangaProgressProviding {
 
       const setupSection: HomeSection = App.createHomeSection({
         id: 'setup',
-        title: 'Configuración Requerida',
+        title: await this.t('setup_required'),
         containsMoreItems: false,
         type: HomeSectionType.singleRowNormal,
         items: [],
@@ -459,7 +564,7 @@ export class KaizenManga extends Source implements MangaProgressProviding {
       setupSection.items = [
         App.createPartialSourceManga({
           mangaId: 'setup_help',
-          title: 'Toca aquí para ver cómo configurar la extensión',
+          title: await this.t('setup_tap'),
           image: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"/>',
         })
       ]
@@ -467,16 +572,20 @@ export class KaizenManga extends Source implements MangaProgressProviding {
     }
   }
 
-  private renderSections(
+  private async renderSections(
     sectionCallback: (section: HomeSection) => void,
     raw: any[],
     host: string,
     token: string
-  ): void {
+  ): Promise<void> {
+    const untitledLabel = await this.t('untitled')
+    const readLabel = await this.t('read')
+    const unreadLabel = await this.t('unread_chapters')
+
     // On Deck (mangas started but not fully read)
     const onDeckSection: HomeSection = App.createHomeSection({
       id: 'on_deck',
-      title: 'En Curso (On Deck)',
+      title: await this.t('on_deck'),
       containsMoreItems: true,
       type: HomeSectionType.singleRowNormal,
       items: raw
@@ -485,9 +594,9 @@ export class KaizenManga extends Source implements MangaProgressProviding {
         .map((m) =>
           App.createPartialSourceManga({
             mangaId: String(m.id),
-            title: m.title ?? 'Sin título',
+            title: m.title ?? untitledLabel,
             image: getCoverUrl(m.metadata, host, token),
-            subtitle: `${m.readingStatus.readChapters}/${m.readingStatus.totalChapters} leídos`,
+            subtitle: `${m.readingStatus.readChapters}/${m.readingStatus.totalChapters} ${readLabel}`,
           })
         ),
     })
@@ -496,7 +605,7 @@ export class KaizenManga extends Source implements MangaProgressProviding {
     // Recently added
     const recentSection: HomeSection = App.createHomeSection({
       id: 'recent',
-      title: 'Recientemente Añadidos',
+      title: await this.t('recently_added'),
       containsMoreItems: true,
       type: HomeSectionType.singleRowNormal,
       items: [...raw]
@@ -505,7 +614,7 @@ export class KaizenManga extends Source implements MangaProgressProviding {
         .map((m) =>
           App.createPartialSourceManga({
             mangaId: String(m.id),
-            title: m.title ?? 'Sin título',
+            title: m.title ?? untitledLabel,
             image: getCoverUrl(m.metadata, host, token),
           })
         ),
@@ -515,7 +624,7 @@ export class KaizenManga extends Source implements MangaProgressProviding {
     // Unread chapters
     const unreadSection: HomeSection = App.createHomeSection({
       id: 'unread',
-      title: 'Capítulos Sin Leer',
+      title: await this.t('unread'),
       containsMoreItems: true,
       type: HomeSectionType.singleRowNormal,
       items: raw
@@ -524,9 +633,9 @@ export class KaizenManga extends Source implements MangaProgressProviding {
         .map((m) =>
           App.createPartialSourceManga({
             mangaId: String(m.id),
-            title: m.title ?? 'Sin título',
+            title: m.title ?? untitledLabel,
             image: getCoverUrl(m.metadata, host, token),
-            subtitle: `${m.readingStatus.unreadChapters} sin leer`,
+            subtitle: `${m.readingStatus.unreadChapters} ${unreadLabel}`,
           })
         ),
     })
@@ -552,7 +661,7 @@ export class KaizenManga extends Source implements MangaProgressProviding {
         items: libMangas.slice(0, 20).map((m) =>
           App.createPartialSourceManga({
             mangaId: String(m.id),
-            title: m.title ?? 'Sin título',
+            title: m.title ?? untitledLabel,
             image: getCoverUrl(m.metadata, host, token),
           })
         ),
@@ -586,11 +695,14 @@ export class KaizenManga extends Source implements MangaProgressProviding {
           return libId === homepageSectionId
         })
       }
+
+      const untitledLabel = await this.t('untitled')
+
       return App.createPagedResults({
         results: results.map((m) =>
           App.createPartialSourceManga({
             mangaId: String(m.id),
-            title: m.title ?? 'Sin título',
+            title: m.title ?? untitledLabel,
             image: getCoverUrl(m.metadata, host, token),
           })
         ),
@@ -604,12 +716,23 @@ export class KaizenManga extends Source implements MangaProgressProviding {
   async getSourceMenu(): Promise<DUISection> {
     return App.createDUISection({
       id: 'settings',
-      header: 'Configuración de Kaizen Downloader',
+      header: await this.t('settings_header'),
       isHidden: false,
       rows: async () => [
+        App.createDUISelect({
+          id: 'language',
+          label: await this.t('language_label'),
+          options: ['en', 'es'],
+          value: App.createDUIBinding({
+            get: async () => ((await this.stateManager.retrieve('language')) as string) ?? 'es',
+            set: async (v: string) => this.stateManager.store('language', v),
+          }),
+          allowsMultiselect: false,
+          labelResolver: async (value: string) => value === 'en' ? 'English' : 'Español'
+        }),
         App.createDUIInputField({
           id: 'host',
-          label: 'Host del Servidor',
+          label: await this.t('host_label'),
           value: App.createDUIBinding({
             get: async () =>
               ((await this.stateManager.retrieve('host')) as string) ?? '',
@@ -618,7 +741,7 @@ export class KaizenManga extends Source implements MangaProgressProviding {
         }),
         App.createDUISecureInputField({
           id: 'token',
-          label: 'API Token',
+          label: await this.t('token_label'),
           value: App.createDUIBinding({
             get: async () =>
               ((await this.stateManager.retrieve('token')) as string) ?? '',
@@ -627,26 +750,26 @@ export class KaizenManga extends Source implements MangaProgressProviding {
         }),
         App.createDUIInputField({
           id: 'status',
-          label: 'Resultado',
+          label: await this.t('status_label'),
           value: App.createDUIBinding({
             get: async () =>
-              ((await this.stateManager.retrieve('status')) as string) ?? 'Sin verificar',
+              ((await this.stateManager.retrieve('status')) as string) ?? await this.t('unverified'),
             set: async (v: string) => { },
           }),
         }),
         App.createDUIButton({
           id: 'test_connection',
-          label: 'Probar Conexión',
+          label: await this.t('test_connection'),
           onTap: async () => {
             const host = ((await this.stateManager.retrieve('host')) as string) ?? ''
             const token = ((await this.stateManager.retrieve('token')) as string) ?? ''
             const cleaned = cleanHost(host)
             if (!cleaned) {
-              await this.stateManager.store('status', 'Error: Host vacío')
+              await this.stateManager.store('status', await this.t('test_error_empty_host'))
               return
             }
 
-            await this.stateManager.store('status', 'Probando conexión...')
+            await this.stateManager.store('status', await this.t('test_testing'))
 
             try {
               const testRequest = App.createRequest({
@@ -659,28 +782,28 @@ export class KaizenManga extends Source implements MangaProgressProviding {
               })
               const resp = await this.requestManager.schedule(testRequest, 1)
               if (resp.status >= 400) {
-                await this.stateManager.store('status', `Error HTTP: ${resp.status}`)
+                await this.stateManager.store('status', `${await this.t('test_error_http')} ${resp.status}`)
                 return
               }
               const data = JSON.parse(resp.data ?? '[]')
               if (!Array.isArray(data)) {
-                await this.stateManager.store('status', 'Error: JSON inválido')
+                await this.stateManager.store('status', await this.t('test_error_json'))
                 return
               }
-              await this.stateManager.store('status', `¡Éxito! (${data.length} mangas)`)
+              await this.stateManager.store('status', `${await this.t('test_success')} (${data.length} ${await this.t('mangas')})`)
             } catch (err: any) {
-              await this.stateManager.store('status', `Error: ${err.message || String(err)}`)
+              await this.stateManager.store('status', `${await this.t('test_error')} ${err.message || String(err)}`)
             }
           }
         }),
         App.createDUIButton({
           id: 'sync_cache',
-          label: 'Sincronizar y Limpiar Caché',
+          label: await this.t('sync_cache'),
           onTap: async () => {
             this._mangasCache = undefined
             await this.stateManager.store('mangas_cache', '')
             await this.stateManager.store('mangas_cache_time', '')
-            await this.stateManager.store('status', 'Caché limpiada. Vuelve a la Biblioteca para refrescar.')
+            await this.stateManager.store('status', await this.t('cache_cleared'))
           }
         })
       ],
@@ -730,12 +853,12 @@ export class KaizenManga extends Source implements MangaProgressProviding {
           return [
             App.createDUISection({
               id: 'info',
-              header: 'Progreso de Lectura en Kaizen',
+              header: await this.t('progress_header'),
               isHidden: false,
               rows: async () => [
                 App.createDUIStepper({
                   id: 'progress_stepper',
-                  label: 'Capítulos Leídos',
+                  label: await this.t('progress_read'),
                   min: 0,
                   max: reading.totalChapters,
                   step: 1,
@@ -751,7 +874,7 @@ export class KaizenManga extends Source implements MangaProgressProviding {
                 }),
                 App.createDUILabel({
                   id: 'total_chapters',
-                  label: 'Capítulos Totales',
+                  label: await this.t('progress_total'),
                   value: String(reading.totalChapters),
                 }),
               ],
@@ -766,7 +889,7 @@ export class KaizenManga extends Source implements MangaProgressProviding {
               rows: async () => [
                 App.createDUILabel({
                   id: 'error_msg',
-                  label: 'No se pudo conectar con el servidor',
+                  label: await this.t('progress_error'),
                   value: err.message || String(err),
                 }),
               ],
