@@ -729,7 +729,7 @@ var _Sources = (() => {
   });
   var import_types = __toESM(require_lib());
   var KaizenMangaInfo = {
-    version: "1.5.3",
+    version: "1.5.4",
     name: "Kaizen Manga",
     icon: "icon.png",
     author: "D4nj3s (DanielJNavas)",
@@ -1035,7 +1035,11 @@ var _Sources = (() => {
             chapNum: ch.index ?? 0,
             name: ch.name ?? `${chapterLabel} ${ch.index}`,
             langCode: "\u{1F1EC}\u{1F1E7}",
-            time: ch.createdAt ? new Date(ch.createdAt) : void 0
+            time: (() => {
+              if (!ch.createdAt) return void 0;
+              const d = new Date(ch.createdAt);
+              return isNaN(d.getTime()) ? void 0 : d;
+            })()
           })
         );
       } catch (e) {
@@ -1512,9 +1516,8 @@ var _Sources = (() => {
         const { host } = await this.creds();
         const actionsByManga = /* @__PURE__ */ new Map();
         for (const readAction of chapterReadActions) {
-          const mangaId = parseInt(readAction.sourceMangaId);
-          const chapterId = parseInt(readAction.sourceChapterId);
-          if (isNaN(mangaId) || isNaN(chapterId)) {
+          const mangaId = readAction.mangaId;
+          if (!mangaId || mangaId === "setup_help") {
             try {
               await actionQueue.discardChapterReadAction(readAction);
             } catch (_) {
@@ -1524,40 +1527,105 @@ var _Sources = (() => {
           if (!actionsByManga.has(mangaId)) {
             actionsByManga.set(mangaId, []);
           }
-          actionsByManga.get(mangaId).push({ chapterId, readAction });
+          actionsByManga.get(mangaId).push(readAction);
         }
         for (const [mangaId, actions] of actionsByManga.entries()) {
-          const chaptersPayload = actions.map((a) => ({
-            id: a.chapterId,
-            isRead: true,
-            lastReadPage: 9999
-            // Force Kaizen reader progress to the end
-          }));
-          let patchSuccess = false;
-          try {
-            const body = { chapters: chaptersPayload };
-            await this.apiFetch(`${host}/api/v1/mangas/${mangaId}`, "PATCH", body);
-            patchSuccess = true;
-          } catch (err) {
-            for (const { readAction } of actions) {
-              try {
-                await actionQueue.retryChapterReadAction(readAction);
-              } catch (_) {
-              }
-            }
-          }
-          if (patchSuccess) {
-            for (const { readAction } of actions) {
+          const numericMangaId = parseInt(mangaId, 10);
+          if (isNaN(numericMangaId)) {
+            for (const readAction of actions) {
               try {
                 await actionQueue.discardChapterReadAction(readAction);
               } catch (_) {
               }
             }
-            this._mangasCache = void 0;
+            continue;
+          }
+          let raw = null;
+          let fetchFailed = false;
+          let isClientError = false;
+          try {
+            raw = await this.apiFetch(`${host}/api/v1/mangas/${numericMangaId}`);
+          } catch (err) {
+            fetchFailed = true;
+            const errStr = String(err);
+            if (errStr.includes("HTTP 404") || errStr.includes("HTTP 400") || errStr.includes("Manga not found") || errStr.includes("Invalid ID")) {
+              isClientError = true;
+            }
+          }
+          if (fetchFailed) {
+            for (const readAction of actions) {
+              try {
+                if (isClientError) {
+                  await actionQueue.discardChapterReadAction(readAction);
+                } else {
+                  await actionQueue.retryChapterReadAction(readAction);
+                }
+              } catch (_) {
+              }
+            }
+            continue;
+          }
+          const chaptersList = raw?.chapters ?? [];
+          const chaptersPayload = [];
+          const actionsToDiscard = [];
+          for (const readAction of actions) {
+            const matched = chaptersList.find(
+              (ch) => Math.abs((ch.index ?? 0) - readAction.chapterNumber) < 0.01
+            );
+            if (matched) {
+              chaptersPayload.push({
+                id: matched.id,
+                isRead: true,
+                lastReadPage: 9999
+                // Force Kaizen reader progress to the end
+              });
+            }
+            actionsToDiscard.push(readAction);
+          }
+          if (chaptersPayload.length > 0) {
+            let patchSuccess = false;
+            let patchClientError = false;
             try {
-              await this.stateManager.store("mangas_cache", "");
-              await this.stateManager.store("mangas_cache_time", "");
-            } catch (_) {
+              const body = { chapters: chaptersPayload };
+              await this.apiFetch(`${host}/api/v1/mangas/${numericMangaId}`, "PATCH", body);
+              patchSuccess = true;
+            } catch (err) {
+              const errStr = String(err);
+              if (errStr.includes("HTTP 404") || errStr.includes("HTTP 400") || errStr.includes("Manga not found")) {
+                patchClientError = true;
+              }
+            }
+            if (patchSuccess) {
+              for (const readAction of actionsToDiscard) {
+                try {
+                  await actionQueue.discardChapterReadAction(readAction);
+                } catch (_) {
+                }
+              }
+              this._mangasCache = void 0;
+              try {
+                await this.stateManager.store("mangas_cache", "");
+                await this.stateManager.store("mangas_cache_time", "");
+              } catch (_) {
+              }
+            } else {
+              for (const readAction of actions) {
+                try {
+                  if (patchClientError) {
+                    await actionQueue.discardChapterReadAction(readAction);
+                  } else {
+                    await actionQueue.retryChapterReadAction(readAction);
+                  }
+                } catch (_) {
+                }
+              }
+            }
+          } else {
+            for (const readAction of actionsToDiscard) {
+              try {
+                await actionQueue.discardChapterReadAction(readAction);
+              } catch (_) {
+              }
             }
           }
         }
