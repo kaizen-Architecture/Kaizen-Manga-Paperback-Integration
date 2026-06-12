@@ -729,7 +729,7 @@ var _Sources = (() => {
   });
   var import_types = __toESM(require_lib());
   var KaizenMangaInfo = {
-    version: "1.5.2",
+    version: "1.5.3",
     name: "Kaizen Manga",
     icon: "icon.png",
     author: "D4nj3s (DanielJNavas)",
@@ -1515,7 +1515,10 @@ var _Sources = (() => {
           const mangaId = parseInt(readAction.sourceMangaId);
           const chapterId = parseInt(readAction.sourceChapterId);
           if (isNaN(mangaId) || isNaN(chapterId)) {
-            await actionQueue.discardChapterReadAction(readAction);
+            try {
+              await actionQueue.discardChapterReadAction(readAction);
+            } catch (_) {
+            }
             continue;
           }
           if (!actionsByManga.has(mangaId)) {
@@ -1530,18 +1533,31 @@ var _Sources = (() => {
             lastReadPage: 9999
             // Force Kaizen reader progress to the end
           }));
+          let patchSuccess = false;
           try {
             const body = { chapters: chaptersPayload };
             await this.apiFetch(`${host}/api/v1/mangas/${mangaId}`, "PATCH", body);
-            for (const { readAction } of actions) {
-              await actionQueue.discardChapterReadAction(readAction);
-            }
-            this._mangasCache = void 0;
-            await this.stateManager.store("mangas_cache", "");
-            await this.stateManager.store("mangas_cache_time", "");
+            patchSuccess = true;
           } catch (err) {
             for (const { readAction } of actions) {
-              await actionQueue.retryChapterReadAction(readAction);
+              try {
+                await actionQueue.retryChapterReadAction(readAction);
+              } catch (_) {
+              }
+            }
+          }
+          if (patchSuccess) {
+            for (const { readAction } of actions) {
+              try {
+                await actionQueue.discardChapterReadAction(readAction);
+              } catch (_) {
+              }
+            }
+            this._mangasCache = void 0;
+            try {
+              await this.stateManager.store("mangas_cache", "");
+              await this.stateManager.store("mangas_cache_time", "");
+            } catch (_) {
             }
           }
         }
