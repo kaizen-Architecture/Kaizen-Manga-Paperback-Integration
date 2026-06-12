@@ -40,7 +40,7 @@ declare const App: any
 // This object is evaluated in Node by the toolchain to generate versioning.json.
 // It must be plain data — no runtime globals.
 export const KaizenMangaInfo: SourceInfo = {
-  version: '1.5.2',
+  version: '1.5.3',
   name: 'Kaizen Manga',
   icon: 'icon.png',
   author: 'D4nj3s (DanielJNavas)',
@@ -951,7 +951,9 @@ export class KaizenManga extends Source implements MangaProgressProviding {
         const mangaId = parseInt(readAction.sourceMangaId)
         const chapterId = parseInt(readAction.sourceChapterId)
         if (isNaN(mangaId) || isNaN(chapterId)) {
-          await actionQueue.discardChapterReadAction(readAction)
+          try {
+            await actionQueue.discardChapterReadAction(readAction)
+          } catch (_) {}
           continue
         }
 
@@ -968,28 +970,38 @@ export class KaizenManga extends Source implements MangaProgressProviding {
           lastReadPage: 9999, // Force Kaizen reader progress to the end
         }))
 
+        let patchSuccess = false
         try {
           const body = { chapters: chaptersPayload }
           await this.apiFetch(`${host}/api/v1/mangas/${mangaId}`, 'PATCH', body)
+          patchSuccess = true
+        } catch (err) {
+          // Retry all on failure
+          for (const { readAction } of actions) {
+            try {
+              await actionQueue.retryChapterReadAction(readAction)
+            } catch (_) {}
+          }
+        }
 
+        if (patchSuccess) {
           // Discard all queued actions for this manga if the PATCH was successful
           for (const { readAction } of actions) {
-            await actionQueue.discardChapterReadAction(readAction)
+            try {
+              await actionQueue.discardChapterReadAction(readAction)
+            } catch (_) {}
           }
 
           // Clear cache on success to force re-fetch
           this._mangasCache = undefined
-          await this.stateManager.store('mangas_cache', '')
-          await this.stateManager.store('mangas_cache_time', '')
-        } catch (err) {
-          // Retry all on failure
-          for (const { readAction } of actions) {
-            await actionQueue.retryChapterReadAction(readAction)
-          }
+          try {
+            await this.stateManager.store('mangas_cache', '')
+            await this.stateManager.store('mangas_cache_time', '')
+          } catch (_) {}
         }
       }
     } catch (err) {
-      // If credentials or root call fails, retry everything
+      // If credentials or root call fails, ignore to prevent crashes
     }
   }
 }
