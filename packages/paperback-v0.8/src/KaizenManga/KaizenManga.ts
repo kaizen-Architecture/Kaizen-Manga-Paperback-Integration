@@ -40,7 +40,7 @@ declare const App: any
 // This object is evaluated in Node by the toolchain to generate versioning.json.
 // It must be plain data — no runtime globals.
 export const KaizenMangaInfo: SourceInfo = {
-  version: '1.5.3',
+  version: '1.5.4',
   name: 'Kaizen Manga',
   icon: 'icon.png',
   author: 'D4nj3s (DanielJNavas)',
@@ -385,7 +385,11 @@ export class KaizenManga extends Source implements MangaProgressProviding {
           chapNum: ch.index ?? 0,
           name: ch.name ?? `${chapterLabel} ${ch.index}`,
           langCode: '🇬🇧',
-          time: ch.createdAt ? new Date(ch.createdAt) : undefined,
+          time: (() => {
+            if (!ch.createdAt) return undefined
+            const d = new Date(ch.createdAt)
+            return isNaN(d.getTime()) ? undefined : d
+          })(),
         })
       )
     } catch (e: any) {
@@ -944,13 +948,12 @@ export class KaizenManga extends Source implements MangaProgressProviding {
       const chapterReadActions = await actionQueue.queuedChapterReadActions()
       const { host } = await this.creds()
 
-      // Group actions by mangaId to avoid N*2 network requests
-      const actionsByManga = new Map<number, { chapterId: number, readAction: any }[]>()
+      // Group actions by the tracker's mangaId (which is our local Kaizen manga ID)
+      const actionsByManga = new Map<string, typeof chapterReadActions>()
 
       for (const readAction of chapterReadActions) {
-        const mangaId = parseInt(readAction.sourceMangaId)
-        const chapterId = parseInt(readAction.sourceChapterId)
-        if (isNaN(mangaId) || isNaN(chapterId)) {
+        const mangaId = readAction.mangaId
+        if (!mangaId || mangaId === 'setup_help') {
           try {
             await actionQueue.discardChapterReadAction(readAction)
           } catch (_) {}
@@ -960,44 +963,112 @@ export class KaizenManga extends Source implements MangaProgressProviding {
         if (!actionsByManga.has(mangaId)) {
           actionsByManga.set(mangaId, [])
         }
-        actionsByManga.get(mangaId)!.push({ chapterId, readAction })
+        actionsByManga.get(mangaId)!.push(readAction)
       }
 
       for (const [mangaId, actions] of actionsByManga.entries()) {
-        const chaptersPayload = actions.map(a => ({
-          id: a.chapterId,
-          isRead: true,
-          lastReadPage: 9999, // Force Kaizen reader progress to the end
-        }))
-
-        let patchSuccess = false
-        try {
-          const body = { chapters: chaptersPayload }
-          await this.apiFetch(`${host}/api/v1/mangas/${mangaId}`, 'PATCH', body)
-          patchSuccess = true
-        } catch (err) {
-          // Retry all on failure
-          for (const { readAction } of actions) {
-            try {
-              await actionQueue.retryChapterReadAction(readAction)
-            } catch (_) {}
-          }
-        }
-
-        if (patchSuccess) {
-          // Discard all queued actions for this manga if the PATCH was successful
-          for (const { readAction } of actions) {
+        const numericMangaId = parseInt(mangaId, 10)
+        if (isNaN(numericMangaId)) {
+          for (const readAction of actions) {
             try {
               await actionQueue.discardChapterReadAction(readAction)
             } catch (_) {}
           }
+          continue
+        }
 
-          // Clear cache on success to force re-fetch
-          this._mangasCache = undefined
+        let raw: any = null
+        let fetchFailed = false
+        let isClientError = false
+
+        try {
+          raw = await this.apiFetch(`${host}/api/v1/mangas/${numericMangaId}`)
+        } catch (err: any) {
+          fetchFailed = true
+          const errStr = String(err)
+          if (errStr.includes('HTTP 404') || errStr.includes('HTTP 400') || errStr.includes('Manga not found') || errStr.includes('Invalid ID')) {
+            isClientError = true
+          }
+        }
+
+        if (fetchFailed) {
+          for (const readAction of actions) {
+            try {
+              if (isClientError) {
+                await actionQueue.discardChapterReadAction(readAction)
+              } else {
+                await actionQueue.retryChapterReadAction(readAction)
+              }
+            } catch (_) {}
+          }
+          continue
+        }
+
+        const chaptersList = raw?.chapters ?? []
+        const chaptersPayload: any[] = []
+        const actionsToDiscard: typeof actions = []
+
+        for (const readAction of actions) {
+          const matched = chaptersList.find((ch: any) => 
+            Math.abs((ch.index ?? 0) - readAction.chapterNumber) < 0.01
+          )
+
+          if (matched) {
+            chaptersPayload.push({
+              id: matched.id,
+              isRead: true,
+              lastReadPage: 9999, // Force Kaizen reader progress to the end
+            })
+          }
+          // Whether matched or not, we should mark this action to be discarded 
+          // because if it is not matched, it does not exist in Kaizen, so retrying won't help.
+          actionsToDiscard.push(readAction)
+        }
+
+        if (chaptersPayload.length > 0) {
+          let patchSuccess = false
+          let patchClientError = false
           try {
-            await this.stateManager.store('mangas_cache', '')
-            await this.stateManager.store('mangas_cache_time', '')
-          } catch (_) {}
+            const body = { chapters: chaptersPayload }
+            await this.apiFetch(`${host}/api/v1/mangas/${numericMangaId}`, 'PATCH', body)
+            patchSuccess = true
+          } catch (err: any) {
+            const errStr = String(err)
+            if (errStr.includes('HTTP 404') || errStr.includes('HTTP 400') || errStr.includes('Manga not found')) {
+              patchClientError = true
+            }
+          }
+
+          if (patchSuccess) {
+            for (const readAction of actionsToDiscard) {
+              try {
+                await actionQueue.discardChapterReadAction(readAction)
+              } catch (_) {}
+            }
+            // Clear cache on success to force re-fetch
+            this._mangasCache = undefined
+            try {
+              await this.stateManager.store('mangas_cache', '')
+              await this.stateManager.store('mangas_cache_time', '')
+            } catch (_) {}
+          } else {
+            for (const readAction of actions) {
+              try {
+                if (patchClientError) {
+                  await actionQueue.discardChapterReadAction(readAction)
+                } else {
+                  await actionQueue.retryChapterReadAction(readAction)
+                }
+              } catch (_) {}
+            }
+          }
+        } else {
+          // If no chapters matched, discard the actions anyway to not block the queue
+          for (const readAction of actionsToDiscard) {
+            try {
+              await actionQueue.discardChapterReadAction(readAction)
+            } catch (_) {}
+          }
         }
       }
     } catch (err) {
