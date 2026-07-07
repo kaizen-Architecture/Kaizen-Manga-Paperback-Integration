@@ -226,7 +226,7 @@ export class KaizenManga extends Source implements MangaProgressProviding {
 
   private async getCachedMangasIfValid(): Promise<any[] | null> {
     const now = Date.now()
-    const CACHE_TTL = 10 * 60 * 1000 // 10 minutes cache TTL
+    const CACHE_TTL = 1 * 60 * 1000 // 1 minute cache TTL
 
     // Memory cache check
     if (this._mangasCache && (now - this._mangasCache.timestamp < CACHE_TTL)) {
@@ -341,6 +341,21 @@ export class KaizenManga extends Source implements MangaProgressProviding {
         }),
       })
     }
+
+    const numericId = parseInt(mangaId, 10)
+    if (isNaN(numericId)) {
+      return App.createSourceManga({
+        id: mangaId,
+        mangaInfo: App.createMangaInfo({
+          titles: ['Kaizen: Manga not found'],
+          image: '',
+          author: 'Kaizen',
+          desc: 'This manga is not in your Kaizen Downloader database or has a mismatched ID. Please search and add it to your Kaizen server first. / Este manga no está en tu servidor Kaizen o tiene un ID incorrecto. Búscalo e impórtalo primero.',
+          status: 'Completed',
+        }),
+      })
+    }
+
     try {
       const { host, token } = await this.creds()
       const raw = await this.apiFetch(`${host}/api/v1/mangas/${mangaId}`)
@@ -365,13 +380,26 @@ export class KaizenManga extends Source implements MangaProgressProviding {
         }),
       })
     } catch (e: any) {
-      throw new Error(`${await this.t('error_manga_details')}${e.message}`)
+      return App.createSourceManga({
+        id: mangaId,
+        mangaInfo: App.createMangaInfo({
+          titles: ['Kaizen: Manga not found'],
+          image: '',
+          author: 'Kaizen',
+          desc: `Could not load manga details from Kaizen. Is it added to your server? / No se pudo cargar el manga de Kaizen. ¿Está añadido a tu servidor?\n\nError: ${e.message}`,
+          status: 'Completed',
+        }),
+      })
     }
   }
 
   // ─── getChapters ──────────────────────────────────────────────────────────
   async getChapters(mangaId: string): Promise<Chapter[]> {
     if (mangaId === 'setup_help') {
+      return []
+    }
+    const numericId = parseInt(mangaId, 10)
+    if (isNaN(numericId)) {
       return []
     }
     try {
@@ -381,9 +409,8 @@ export class KaizenManga extends Source implements MangaProgressProviding {
       return (raw.chapters ?? []).map((ch: any) =>
         App.createChapter({
           id: String(ch.id),
-          mangaId,
-          chapNum: ch.index ?? 0,
-          name: ch.name ?? `${chapterLabel} ${ch.index}`,
+          chapNum: (ch.index ?? 0) + 1,
+          name: ch.name ?? `${chapterLabel} ${(ch.index ?? 0) + 1}`,
           langCode: '🇬🇧',
           time: (() => {
             if (!ch.createdAt) return undefined
@@ -393,7 +420,7 @@ export class KaizenManga extends Source implements MangaProgressProviding {
         })
       )
     } catch (e: any) {
-      throw new Error(`${await this.t('error_chapters')}${e.message}`)
+      return []
     }
   }
 
@@ -730,8 +757,11 @@ export class KaizenManga extends Source implements MangaProgressProviding {
           label: await this.t('language_label'),
           options: ['en', 'es'],
           value: App.createDUIBinding({
-            get: async () => ((await this.stateManager.retrieve('language')) as string) ?? 'es',
-            set: async (v: string) => this.stateManager.store('language', v),
+            get: async () => [((await this.stateManager.retrieve('language')) as string) ?? 'es'],
+            set: async (v: string[]) => {
+              const val = v[0] ?? 'es'
+              await this.stateManager.store('language', val)
+            },
           }),
           allowsMultiselect: false,
           labelResolver: async (value: string) => value === 'en' ? 'English' : 'Español'
@@ -754,14 +784,10 @@ export class KaizenManga extends Source implements MangaProgressProviding {
             set: async (v: string) => this.stateManager.store('token', v),
           }),
         }),
-        App.createDUIInputField({
+        App.createDUILabel({
           id: 'status',
           label: await this.t('status_label'),
-          value: App.createDUIBinding({
-            get: async () =>
-              ((await this.stateManager.retrieve('status')) as string) ?? await this.t('unverified'),
-            set: async (v: string) => { },
-          }),
+          value: ((await this.stateManager.retrieve('status')) as string) ?? await this.t('unverified'),
         }),
         App.createDUIButton({
           id: 'test_connection',
@@ -826,7 +852,7 @@ export class KaizenManga extends Source implements MangaProgressProviding {
       const readChapters = (raw.chapters ?? []).filter((ch: any) => ch.isRead)
       let lastReadChapterNumber = 0
       if (readChapters.length > 0) {
-        lastReadChapterNumber = Math.max(...readChapters.map((ch: any) => ch.index ?? 0))
+        lastReadChapterNumber = Math.max(...readChapters.map((ch: any) => (ch.index ?? 0) + 1))
       }
 
       return App.createMangaProgress({
@@ -1010,7 +1036,7 @@ export class KaizenManga extends Source implements MangaProgressProviding {
 
         for (const readAction of actions) {
           const matched = chaptersList.find((ch: any) => 
-            Math.abs((ch.index ?? 0) - readAction.chapterNumber) < 0.01
+            Math.abs(((ch.index ?? 0) + 1) - readAction.chapterNumber) < 0.01
           )
 
           if (matched) {
