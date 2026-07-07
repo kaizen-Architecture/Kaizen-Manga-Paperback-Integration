@@ -891,7 +891,7 @@ var _Sources = (() => {
     }
     async getCachedMangasIfValid() {
       const now = Date.now();
-      const CACHE_TTL = 10 * 60 * 1e3;
+      const CACHE_TTL = 1 * 60 * 1e3;
       if (this._mangasCache && now - this._mangasCache.timestamp < CACHE_TTL) {
         return this._mangasCache.data;
       }
@@ -996,6 +996,19 @@ var _Sources = (() => {
           })
         });
       }
+      const numericId = parseInt(mangaId, 10);
+      if (isNaN(numericId)) {
+        return App.createSourceManga({
+          id: mangaId,
+          mangaInfo: App.createMangaInfo({
+            titles: ["Kaizen: Manga not found"],
+            image: "",
+            author: "Kaizen",
+            desc: "This manga is not in your Kaizen Downloader database or has a mismatched ID. Please search and add it to your Kaizen server first. / Este manga no est\xE1 en tu servidor Kaizen o tiene un ID incorrecto. B\xFAscalo e imp\xF3rtalo primero.",
+            status: "Completed"
+          })
+        });
+      }
       try {
         const { host, token } = await this.creds();
         const raw = await this.apiFetch(`${host}/api/v1/mangas/${mangaId}`);
@@ -1016,12 +1029,27 @@ var _Sources = (() => {
           })
         });
       } catch (e) {
-        throw new Error(`${await this.t("error_manga_details")}${e.message}`);
+        return App.createSourceManga({
+          id: mangaId,
+          mangaInfo: App.createMangaInfo({
+            titles: ["Kaizen: Manga not found"],
+            image: "",
+            author: "Kaizen",
+            desc: `Could not load manga details from Kaizen. Is it added to your server? / No se pudo cargar el manga de Kaizen. \xBFEst\xE1 a\xF1adido a tu servidor?
+
+Error: ${e.message}`,
+            status: "Completed"
+          })
+        });
       }
     }
     // ─── getChapters ──────────────────────────────────────────────────────────
     async getChapters(mangaId) {
       if (mangaId === "setup_help") {
+        return [];
+      }
+      const numericId = parseInt(mangaId, 10);
+      if (isNaN(numericId)) {
         return [];
       }
       try {
@@ -1031,9 +1059,8 @@ var _Sources = (() => {
         return (raw.chapters ?? []).map(
           (ch) => App.createChapter({
             id: String(ch.id),
-            mangaId,
-            chapNum: ch.index ?? 0,
-            name: ch.name ?? `${chapterLabel} ${ch.index}`,
+            chapNum: (ch.index ?? 0) + 1,
+            name: ch.name ?? `${chapterLabel} ${(ch.index ?? 0) + 1}`,
             langCode: "\u{1F1EC}\u{1F1E7}",
             time: (() => {
               if (!ch.createdAt) return void 0;
@@ -1043,7 +1070,7 @@ var _Sources = (() => {
           })
         );
       } catch (e) {
-        throw new Error(`${await this.t("error_chapters")}${e.message}`);
+        return [];
       }
     }
     // ─── getChapterDetails ────────────────────────────────────────────────────
@@ -1320,8 +1347,11 @@ var _Sources = (() => {
             label: await this.t("language_label"),
             options: ["en", "es"],
             value: App.createDUIBinding({
-              get: async () => await this.stateManager.retrieve("language") ?? "es",
-              set: async (v) => this.stateManager.store("language", v)
+              get: async () => [await this.stateManager.retrieve("language") ?? "es"],
+              set: async (v) => {
+                const val = v[0] ?? "es";
+                await this.stateManager.store("language", val);
+              }
             }),
             allowsMultiselect: false,
             labelResolver: async (value) => value === "en" ? "English" : "Espa\xF1ol"
@@ -1342,14 +1372,10 @@ var _Sources = (() => {
               set: async (v) => this.stateManager.store("token", v)
             })
           }),
-          App.createDUIInputField({
+          App.createDUILabel({
             id: "status",
             label: await this.t("status_label"),
-            value: App.createDUIBinding({
-              get: async () => await this.stateManager.retrieve("status") ?? await this.t("unverified"),
-              set: async (v) => {
-              }
-            })
+            value: await this.stateManager.retrieve("status") ?? await this.t("unverified")
           }),
           App.createDUIButton({
             id: "test_connection",
@@ -1410,7 +1436,7 @@ var _Sources = (() => {
         const readChapters = (raw.chapters ?? []).filter((ch) => ch.isRead);
         let lastReadChapterNumber = 0;
         if (readChapters.length > 0) {
-          lastReadChapterNumber = Math.max(...readChapters.map((ch) => ch.index ?? 0));
+          lastReadChapterNumber = Math.max(...readChapters.map((ch) => (ch.index ?? 0) + 1));
         }
         return App.createMangaProgress({
           mangaId,
@@ -1570,7 +1596,7 @@ var _Sources = (() => {
           const actionsToDiscard = [];
           for (const readAction of actions) {
             const matched = chaptersList.find(
-              (ch) => Math.abs((ch.index ?? 0) - readAction.chapterNumber) < 0.01
+              (ch) => Math.abs((ch.index ?? 0) + 1 - readAction.chapterNumber) < 0.01
             );
             if (matched) {
               chaptersPayload.push({
