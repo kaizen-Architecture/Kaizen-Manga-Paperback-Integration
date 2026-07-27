@@ -17,4 +17,5 @@ docs/
 
 # Backups
 *.pas4
+temp_backup/
 

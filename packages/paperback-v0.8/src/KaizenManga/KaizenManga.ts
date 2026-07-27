@@ -40,7 +40,7 @@ declare const App: any
 // This object is evaluated in Node by the toolchain to generate versioning.json.
 // It must be plain data — no runtime globals.
 export const KaizenMangaInfo: SourceInfo = {
-  version: '1.5.4',
+  version: '1.5.5',
   name: 'Kaizen Manga',
   icon: 'icon.png',
   author: 'D4nj3s (DanielJNavas)',
@@ -226,7 +226,7 @@ export class KaizenManga extends Source implements MangaProgressProviding {
 
   private async getCachedMangasIfValid(): Promise<any[] | null> {
     const now = Date.now()
-    const CACHE_TTL = 1 * 60 * 1000 // 1 minute cache TTL
+    const CACHE_TTL = 30 * 1000 // 30 seconds cache TTL for fresh home sections
 
     // Memory cache check
     if (this._mangasCache && (now - this._mangasCache.timestamp < CACHE_TTL)) {
@@ -406,7 +406,10 @@ export class KaizenManga extends Source implements MangaProgressProviding {
       const { host } = await this.creds()
       const raw = await this.apiFetch(`${host}/api/v1/mangas/${mangaId}`)
       const chapterLabel = await this.t('chapter')
-      return (raw.chapters ?? []).map((ch: any) =>
+      const chapters = (raw.chapters ?? []).sort(
+        (a: any, b: any) => (a.index ?? 0) - (b.index ?? 0)
+      )
+      return chapters.map((ch: any) =>
         App.createChapter({
           id: String(ch.id),
           chapNum: (ch.index ?? 0) + 1,
@@ -972,13 +975,15 @@ export class KaizenManga extends Source implements MangaProgressProviding {
   async processChapterReadActionQueue(actionQueue: TrackerActionQueue): Promise<void> {
     try {
       const chapterReadActions = await actionQueue.queuedChapterReadActions()
+      if (!chapterReadActions || chapterReadActions.length === 0) return
+
       const { host } = await this.creds()
 
       // Group actions by the tracker's mangaId (which is our local Kaizen manga ID)
       const actionsByManga = new Map<string, typeof chapterReadActions>()
 
       for (const readAction of chapterReadActions) {
-        const mangaId = readAction.mangaId
+        const mangaId = readAction.mangaId || readAction.sourceMangaId
         if (!mangaId || mangaId === 'setup_help') {
           try {
             await actionQueue.discardChapterReadAction(readAction)
