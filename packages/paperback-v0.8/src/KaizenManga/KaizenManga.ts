@@ -40,7 +40,7 @@ declare const App: any
 // This object is evaluated in Node by the toolchain to generate versioning.json.
 // It must be plain data — no runtime globals.
 export const KaizenMangaInfo: SourceInfo = {
-  version: '1.5.5',
+  version: '1.5.6',
   name: 'Kaizen Manga',
   icon: 'icon.png',
   author: 'D4nj3s (DanielJNavas)',
@@ -522,89 +522,29 @@ export class KaizenManga extends Source implements MangaProgressProviding {
   ): Promise<void> {
     try {
       const { host, token } = await this.creds()
-      
-      // Try to load cached mangas from memory or storage
-      const cached = await this.getCachedMangasIfValid()
-      
-      if (cached && cached.length > 0) {
-        // Render instantly using cached data (no flicker, no skeletons!)
-        await this.renderSections(sectionCallback, cached, host, token)
-        
-        // Trigger a background refresh to keep data updated
-        this.refreshMangasCacheInBackground(host).then(async (newData) => {
-          if (newData && newData.length > 0) {
-            await this.renderSections(sectionCallback, newData, host, token)
-          }
-        }).catch(() => {})
+      const raw: any[] = await this.getCachedMangas(host)
+      if (raw && raw.length > 0) {
+        await this.renderSections(sectionCallback, raw, host, token)
         return
       }
-    } catch (_) {}
-
-    // Fallback: No cache available (first run). Render skeleton loaders, then fetch blocking.
-    const onDeckSection: HomeSection = App.createHomeSection({
-      id: 'on_deck',
-      title: await this.t('on_deck'),
-      containsMoreItems: true,
-      type: HomeSectionType.singleRowNormal,
-      items: [],
-    })
-    sectionCallback(onDeckSection)
-
-    const recentSection: HomeSection = App.createHomeSection({
-      id: 'recent',
-      title: await this.t('recently_added'),
-      containsMoreItems: true,
-      type: HomeSectionType.singleRowNormal,
-      items: [],
-    })
-    sectionCallback(recentSection)
-
-    const unreadSection: HomeSection = App.createHomeSection({
-      id: 'unread',
-      title: await this.t('unread'),
-      containsMoreItems: true,
-      type: HomeSectionType.singleRowNormal,
-      items: [],
-    })
-    sectionCallback(unreadSection)
-
-    try {
-      const { host, token } = await this.creds()
-      const raw: any[] = await this.apiFetch(`${host}/api/v1/mangas`)
-      
-      // Update cache
-      const now = Date.now()
-      this._mangasCache = { data: raw, timestamp: now }
-      await this.stateManager.store('mangas_cache', JSON.stringify(raw))
-      await this.stateManager.store('mangas_cache_time', String(now))
-
-      // Populate sections
-      await this.renderSections(sectionCallback, raw, host, token)
     } catch (err) {
-      // Clear main sections if they failed
-      onDeckSection.items = []
-      sectionCallback(onDeckSection)
-      recentSection.items = []
-      sectionCallback(recentSection)
-      unreadSection.items = []
-      sectionCallback(unreadSection)
-
-      const setupSection: HomeSection = App.createHomeSection({
-        id: 'setup',
-        title: await this.t('setup_required'),
-        containsMoreItems: false,
-        type: HomeSectionType.singleRowNormal,
-        items: [],
-      })
-      sectionCallback(setupSection)
-      setupSection.items = [
-        App.createPartialSourceManga({
-          mangaId: 'setup_help',
-          title: await this.t('setup_tap'),
-          image: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"/>',
+      // Show setup help if not configured or server unreachable
+      try {
+        const setupSection: HomeSection = App.createHomeSection({
+          id: 'setup',
+          title: await this.t('setup_required'),
+          containsMoreItems: false,
+          type: HomeSectionType.singleRowNormal,
+          items: [
+            App.createPartialSourceManga({
+              mangaId: 'setup_help',
+              title: await this.t('setup_tap'),
+              image: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"/>',
+            }),
+          ],
         })
-      ]
-      sectionCallback(setupSection)
+        sectionCallback(setupSection)
+      } catch (_) {}
     }
   }
 
@@ -1040,9 +980,13 @@ export class KaizenManga extends Source implements MangaProgressProviding {
         const actionsToDiscard: typeof actions = []
 
         for (const readAction of actions) {
-          const matched = chaptersList.find((ch: any) => 
-            Math.abs(((ch.index ?? 0) + 1) - readAction.chapterNumber) < 0.01
-          )
+          const matched = chaptersList.find((ch: any) => {
+            if (ch.id && String(ch.id) === String(readAction.sourceChapterId || readAction.chapterId)) {
+              return true
+            }
+            const chNum = (ch.index ?? 0) + 1
+            return Math.abs(chNum - readAction.chapterNumber) < 0.01
+          })
 
           if (matched) {
             chaptersPayload.push({
