@@ -729,7 +729,7 @@ var _Sources = (() => {
   });
   var import_types = __toESM(require_lib());
   var KaizenMangaInfo = {
-    version: "1.5.5",
+    version: "1.5.6",
     name: "Kaizen Manga",
     icon: "icon.png",
     author: "D4nj3s (DanielJNavas)",
@@ -1158,74 +1158,29 @@ Error: ${e.message}`,
     async getHomePageSections(sectionCallback) {
       try {
         const { host, token } = await this.creds();
-        const cached = await this.getCachedMangasIfValid();
-        if (cached && cached.length > 0) {
-          await this.renderSections(sectionCallback, cached, host, token);
-          this.refreshMangasCacheInBackground(host).then(async (newData) => {
-            if (newData && newData.length > 0) {
-              await this.renderSections(sectionCallback, newData, host, token);
-            }
-          }).catch(() => {
-          });
+        const raw = await this.getCachedMangas(host);
+        if (raw && raw.length > 0) {
+          await this.renderSections(sectionCallback, raw, host, token);
           return;
         }
-      } catch (_) {
-      }
-      const onDeckSection = App.createHomeSection({
-        id: "on_deck",
-        title: await this.t("on_deck"),
-        containsMoreItems: true,
-        type: import_types.HomeSectionType.singleRowNormal,
-        items: []
-      });
-      sectionCallback(onDeckSection);
-      const recentSection = App.createHomeSection({
-        id: "recent",
-        title: await this.t("recently_added"),
-        containsMoreItems: true,
-        type: import_types.HomeSectionType.singleRowNormal,
-        items: []
-      });
-      sectionCallback(recentSection);
-      const unreadSection = App.createHomeSection({
-        id: "unread",
-        title: await this.t("unread"),
-        containsMoreItems: true,
-        type: import_types.HomeSectionType.singleRowNormal,
-        items: []
-      });
-      sectionCallback(unreadSection);
-      try {
-        const { host, token } = await this.creds();
-        const raw = await this.apiFetch(`${host}/api/v1/mangas`);
-        const now = Date.now();
-        this._mangasCache = { data: raw, timestamp: now };
-        await this.stateManager.store("mangas_cache", JSON.stringify(raw));
-        await this.stateManager.store("mangas_cache_time", String(now));
-        await this.renderSections(sectionCallback, raw, host, token);
       } catch (err) {
-        onDeckSection.items = [];
-        sectionCallback(onDeckSection);
-        recentSection.items = [];
-        sectionCallback(recentSection);
-        unreadSection.items = [];
-        sectionCallback(unreadSection);
-        const setupSection = App.createHomeSection({
-          id: "setup",
-          title: await this.t("setup_required"),
-          containsMoreItems: false,
-          type: import_types.HomeSectionType.singleRowNormal,
-          items: []
-        });
-        sectionCallback(setupSection);
-        setupSection.items = [
-          App.createPartialSourceManga({
-            mangaId: "setup_help",
-            title: await this.t("setup_tap"),
-            image: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"/>'
-          })
-        ];
-        sectionCallback(setupSection);
+        try {
+          const setupSection = App.createHomeSection({
+            id: "setup",
+            title: await this.t("setup_required"),
+            containsMoreItems: false,
+            type: import_types.HomeSectionType.singleRowNormal,
+            items: [
+              App.createPartialSourceManga({
+                mangaId: "setup_help",
+                title: await this.t("setup_tap"),
+                image: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"/>'
+              })
+            ]
+          });
+          sectionCallback(setupSection);
+        } catch (_) {
+        }
       }
     }
     async renderSections(sectionCallback, raw, host, token) {
@@ -1599,9 +1554,13 @@ Error: ${e.message}`,
           const chaptersPayload = [];
           const actionsToDiscard = [];
           for (const readAction of actions) {
-            const matched = chaptersList.find(
-              (ch) => Math.abs((ch.index ?? 0) + 1 - readAction.chapterNumber) < 0.01
-            );
+            const matched = chaptersList.find((ch) => {
+              if (ch.id && String(ch.id) === String(readAction.sourceChapterId || readAction.chapterId)) {
+                return true;
+              }
+              const chNum = (ch.index ?? 0) + 1;
+              return Math.abs(chNum - readAction.chapterNumber) < 0.01;
+            });
             if (matched) {
               chaptersPayload.push({
                 id: matched.id,
